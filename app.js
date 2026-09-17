@@ -89,6 +89,10 @@ const passwordMessage = document.querySelector("#passwordMessage");
 const passwordCancel = document.querySelector("#passwordCancel");
 const accessNav = document.querySelector("#accessNav");
 const importCard = document.querySelector("#importCard");
+const fromVersion = document.querySelector("#fromVersion");
+const toVersion = document.querySelector("#toVersion");
+const compareVersionsButton = document.querySelector("#compareVersionsButton");
+const versionMessage = document.querySelector("#versionMessage");
 let currentScenario = scenarios.latency;
 let currentFilter = "all";
 let analyzed = false;
@@ -97,6 +101,7 @@ let currentAnalysisId = null;
 let setupRequired = false;
 let currentUser = null;
 let availableProjects = [];
+let currentVersions = [];
 let passwordChangeForced = false;
 
 function showAuthGate(requiresSetup = false) {
@@ -212,10 +217,141 @@ async function loadAvailableProjects(preferredProjectId = null) {
     if (currentProjectId === "demo") changedNodeInput.value = currentScenario.sourceNode;
     resetAnalysis();
     applySelectedProjectAccess();
+    if (document.querySelector('[data-view-panel="versions"]').classList.contains("active")) {
+      loadProjectVersions();
+    }
   } catch (error) {
     analysisState.className = "analysis-state error";
     analysisState.innerHTML = "<span></span>";
     analysisState.append(document.createTextNode(` ${error.message}`));
+  }
+}
+
+function resetVersionDiff() {
+  ["#diffAdded", "#diffRemoved", "#diffModified", "#diffTotal"].forEach(selector => {
+    document.querySelector(selector).textContent = "—";
+  });
+  document.querySelector("#nodeDiffTable").innerHTML = '<tr class="placeholder-row"><td colspan="3">Karşılaştırma bekleniyor.</td></tr>';
+  document.querySelector("#edgeDiffTable").innerHTML = '<tr class="placeholder-row"><td colspan="3">Karşılaştırma bekleniyor.</td></tr>';
+}
+
+function versionSourceLabel(source) {
+  return { seed: "Başlangıç", csv: "CSV", migration: "Aktarılan" }[source] || source;
+}
+
+function renderVersionHistory() {
+  const history = document.querySelector("#versionHistory");
+  history.innerHTML = currentVersions.length
+    ? currentVersions.map(version => `
+      <div class="version-history-item">
+        <strong>v${version.version_number}</strong>
+        <span>${version.node_count} düğüm · ${version.edge_count} ilişki</span>
+        <small>${escapeHtml(version.created_by_email)} · ${new Date(version.created_at).toLocaleString("tr-TR")}</small>
+        <span class="version-source">${escapeHtml(versionSourceLabel(version.source))}</span>
+      </div>
+    `).join("")
+    : '<p class="version-message">Bu proje için sürüm kaydı bulunamadı.</p>';
+}
+
+async function loadProjectVersions() {
+  resetVersionDiff();
+  if (!currentProjectId) {
+    versionMessage.className = "version-message error";
+    versionMessage.textContent = "Karşılaştırılacak bir proje seçilmedi.";
+    return;
+  }
+  versionMessage.className = "version-message";
+  versionMessage.textContent = "Sürüm geçmişi alınıyor…";
+  try {
+    const response = await apiFetch(`/api/projects/versions?project_id=${encodeURIComponent(currentProjectId)}`, { cache: "no-store" });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Sürümler alınamadı.");
+    currentVersions = result.versions;
+    document.querySelector("#versionCountChip").textContent = `${currentVersions.length} sürüm`;
+    const options = currentVersions.map(version =>
+      `<option value="${escapeHtml(version.id)}">v${version.version_number} · ${version.node_count} düğüm · ${new Date(version.created_at).toLocaleDateString("tr-TR")}</option>`
+    ).join("");
+    fromVersion.innerHTML = options;
+    toVersion.innerHTML = options;
+    if (currentVersions.length >= 2) {
+      fromVersion.value = currentVersions[1].id;
+      toVersion.value = currentVersions[0].id;
+      compareVersionsButton.disabled = false;
+      versionMessage.textContent = "Karşılaştırmaya hazır. Varsayılan olarak son iki sürüm seçildi.";
+    } else {
+      compareVersionsButton.disabled = true;
+      versionMessage.textContent = "Fark analizi için aktif projeye en az bir yeni CSV sürümü yükle.";
+    }
+    renderVersionHistory();
+  } catch (error) {
+    currentVersions = [];
+    compareVersionsButton.disabled = true;
+    versionMessage.className = "version-message error";
+    versionMessage.textContent = error.message;
+  }
+}
+
+function diffChangeLabel(change) {
+  return { added: "Eklendi", removed: "Kaldırıldı", modified: "Değiştirildi" }[change];
+}
+
+function formatDiffFields(item) {
+  const fieldLabels = {
+    label: "ad", type: "tür", owner: "sorumlu", criticality: "kritiklik", reason: "gerekçe"
+  };
+  if (item.change === "added") {
+    return escapeHtml(item.after?.label || "Yeni kayıt");
+  }
+  if (item.change === "removed") {
+    return escapeHtml(item.before?.label || "Kayıt kaldırıldı");
+  }
+  return item.fields.map(field => {
+    const before = item.before?.[field] ?? "—";
+    const after = item.after?.[field] ?? "—";
+    return `<span class="diff-field"><b>${escapeHtml(fieldLabels[field] || field)}:</b> ${escapeHtml(before)} → ${escapeHtml(after)}</span>`;
+  }).join("");
+}
+
+function renderDiffRows(selector, items) {
+  document.querySelector(selector).innerHTML = items.length
+    ? items.map(item => `
+      <tr>
+        <td><span class="change-badge ${item.change}">${diffChangeLabel(item.change)}</span></td>
+        <td class="artifact-cell"><strong>${escapeHtml(item.identity)}</strong></td>
+        <td class="diff-fields">${formatDiffFields(item)}</td>
+      </tr>
+    `).join("")
+    : '<tr class="placeholder-row"><td colspan="3">Bu grupta değişiklik yok.</td></tr>';
+}
+
+async function compareProjectVersions() {
+  if (!fromVersion.value || !toVersion.value) return;
+  compareVersionsButton.disabled = true;
+  versionMessage.className = "version-message";
+  versionMessage.textContent = "Sürüm anlık görüntüleri karşılaştırılıyor…";
+  try {
+    const params = new URLSearchParams({
+      project_id: currentProjectId,
+      from_version: fromVersion.value,
+      to_version: toVersion.value
+    });
+    const response = await apiFetch(`/api/projects/diff?${params}`, { cache: "no-store" });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Sürümler karşılaştırılamadı.");
+    const summary = result.summary;
+    document.querySelector("#diffAdded").textContent = summary.nodes_added + summary.edges_added;
+    document.querySelector("#diffRemoved").textContent = summary.nodes_removed + summary.edges_removed;
+    document.querySelector("#diffModified").textContent = summary.nodes_modified + summary.edges_modified;
+    document.querySelector("#diffTotal").textContent = summary.total_changes;
+    renderDiffRows("#nodeDiffTable", result.node_changes);
+    renderDiffRows("#edgeDiffTable", result.edge_changes);
+    versionMessage.className = "version-message success";
+    versionMessage.textContent = `v${result.from_version.version_number} → v${result.to_version.version_number}: ${summary.total_changes} değişiklik bulundu.`;
+  } catch (error) {
+    versionMessage.className = "version-message error";
+    versionMessage.textContent = error.message;
+  } finally {
+    compareVersionsButton.disabled = currentVersions.length < 2;
   }
 }
 
@@ -462,25 +598,31 @@ async function importGraph() {
   importStatus.textContent = "CSV dosyaları doğrulanıyor…";
   try {
     const [nodesCsv, edgesCsv] = await Promise.all([nodesFile.text(), edgesFile.text()]);
-    const projectId = `uploaded-${Date.now()}`;
+    const selectedProject = availableProjects.find(project => project.id === currentProjectId);
+    if (!selectedProject) throw new Error("Yeni sürüm için aktif bir proje seçmelisin.");
     const response = await apiFetch("/api/projects/import", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ project_id: projectId, nodes_csv: nodesCsv, edges_csv: edgesCsv })
+      body: JSON.stringify({
+        project_id: currentProjectId,
+        name: selectedProject.name,
+        nodes_csv: nodesCsv,
+        edges_csv: edgesCsv
+      })
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "Grafik yüklenemedi.");
     currentProjectId = result.project_id;
     document.querySelector("#dataBadge").lastChild.textContent = " Yüklenen CSV verisi";
     importStatus.className = "import-status success";
-    importStatus.textContent = `Aktif veri kümesi: ${result.node_count} düğüm, ${result.edge_count} ilişki`;
+    importStatus.textContent = `${result.message} ${result.node_count} düğüm, ${result.edge_count} ilişki.`;
     await loadAvailableProjects(result.project_id);
   } catch (error) {
     importStatus.className = "import-status error";
     importStatus.textContent = error.message;
   } finally {
     importButton.disabled = false;
-    importButton.textContent = "Grafiği yükle";
+    importButton.textContent = "Yeni sürümü yükle";
   }
 }
 
@@ -541,6 +683,7 @@ document.querySelectorAll(".nav-item").forEach(button => {
     document.querySelectorAll(".nav-item").forEach(item => item.classList.toggle("active", item === button));
     document.querySelectorAll(".view").forEach(view => view.classList.toggle("active", view.dataset.viewPanel === button.dataset.view));
     if (button.dataset.view === "access") loadAccessData();
+    if (button.dataset.view === "versions") loadProjectVersions();
   });
 });
 
@@ -558,9 +701,11 @@ projectSelect.addEventListener("change", () => {
   if (currentProjectId === "demo") changedNodeInput.value = currentScenario.sourceNode;
   resetAnalysis();
   applySelectedProjectAccess();
+  if (document.querySelector('[data-view-panel="versions"]').classList.contains("active")) loadProjectVersions();
 });
 analyzeButton.addEventListener("click", runAnalysis);
 importButton.addEventListener("click", importGraph);
+compareVersionsButton.addEventListener("click", compareProjectVersions);
 document.querySelector("#createUserForm").addEventListener("submit", async event => {
   event.preventDefault();
   const status = document.querySelector("#createUserStatus");

@@ -6,7 +6,7 @@ NexTrace AI, kritik mühendislik projelerinde bir değişikliğin gereksinim, ko
 
 ## Mevcut sürüm — çalışan MVP temeli
 
-Bu depo, ürün fikrini ve temel kullanıcı akışını doğrulayan **dinamik etki analizi motoru ile çalışan MVP temelini** içerir. Arayüz artık hazır sonuçları taklit etmez; Python API, yüklenen izlenebilirlik grafiğini tarayarak etkilenen varlıkları, kanıt yollarını ve risk puanlarını hesaplar. Projeler ve analiz geçmişi SQLite veritabanında kalıcı olarak tutulur. Yönetici ve analist rolleri proje bazlı erişimle ayrılır. Henüz gerçek kurum sistemlerine doğrudan bağlanan üretim sürümü veya doğrulanmış müşteri pilotu değildir.
+Bu depo, ürün fikrini ve temel kullanıcı akışını doğrulayan **dinamik etki analizi motoru ile çalışan MVP temelini** içerir. Arayüz artık hazır sonuçları taklit etmez; Python API, yüklenen izlenebilirlik grafiğini tarayarak etkilenen varlıkları, kanıt yollarını ve risk puanlarını hesaplar. Projeler, değiştirilemez grafik sürümleri ve analiz geçmişi SQLite veritabanında kalıcı olarak tutulur. Yönetici ve analist rolleri proje bazlı erişimle ayrılır. Henüz gerçek kurum sistemlerine doğrudan bağlanan üretim sürümü veya doğrulanmış müşteri pilotu değildir.
 
 Demoda üç örnek değişiklik senaryosu bulunur:
 
@@ -14,7 +14,7 @@ Demoda üç örnek değişiklik senaryosu bulunur:
 - Şifreleme standardının yükseltilmesi
 - Sensör örnekleme sıklığının artırılması
 
-Kullanıcı örnek senaryolardan birini seçebilir veya kendi düğüm/ilişki CSV dosyalarını yükleyebilir. Analiz çalıştırıldığında sistem:
+Kullanıcı örnek senaryolardan birini seçebilir veya aktif projenin yeni düğüm/ilişki CSV sürümünü yükleyebilir. İki grafik sürümü arasındaki eklenen, kaldırılan ve değiştirilen düğüm ve ilişkiler karşılaştırılabilir. Analiz çalıştırıldığında sistem:
 
 - Etkilenen mühendislik varlıklarını,
 - Kritik, yüksek ve orta düzey riskleri,
@@ -85,6 +85,8 @@ source,target,relation,reason
 - `GET /api/auth/status`: ilk kurulum ve oturum durumu
 - `GET /api/projects`: kalıcı proje listesi ve grafik büyüklükleri
 - `GET /api/analyses?project_id=demo`: kayıtlı analiz geçmişi
+- `GET /api/projects/versions?project_id=demo`: proje grafik sürümleri
+- `GET /api/projects/diff?project_id=demo&from_version=...&to_version=...`: iki grafik sürümü arasındaki farklar
 - `GET /api/users`: yönetici için kullanıcı listesi
 - `GET /api/projects/access`: yönetici için proje üyelikleri
 - `POST /api/auth/setup`: yalnızca ilk yönetici hesabını oluşturma
@@ -107,7 +109,7 @@ python -m unittest discover -s tests -v
 ## Sonraki ürünleştirme adımları
 
 - Jira, GitLab ve test yönetim araçları için gerçek bağlayıcılar
-- Proje grafiği sürümleme ve değişiklik karşılaştırma
+- Grafik sürümleri için geri yükleme ve onay iş akışı
 - Kurumsal kimlik sağlayıcı (SSO/OIDC) ve e-posta tabanlı hesap kurtarma
 - Müşteri verisiyle doğrulanan risk modeli
 - Kurum içi veya özel bulut kurulumu
@@ -123,6 +125,7 @@ Hedef ürün, müşteri verilerini müşteri ortamında tutacak şekilde kurum i
 - Proje ve analiz API'leri kimlik doğrulama olmadan kullanılamaz.
 - Analistler yalnızca atandıkları projeleri görebilir; `viewer` analiz çalıştıramaz.
 - Kullanıcı oluşturma, proje içe aktarma ve yetki atama yalnızca yöneticiye açıktır.
+- Her CSV içe aktarma işlemi mevcut grafiği silmeden yeni ve karşılaştırılabilir bir sürüm oluşturur.
 - Yönetici parola sıfırladığında eski oturumlar kapatılır ve ilk girişte parola değişikliği zorunlu tutulur.
 - Devre dışı bırakılan hesapların bütün açık oturumları iptal edilir; son aktif yönetici hesabı kapatılamaz.
 

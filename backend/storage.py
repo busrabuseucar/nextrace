@@ -100,6 +100,40 @@ class ProjectStore:
                     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
                     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
                 );
+
+                CREATE TABLE IF NOT EXISTS project_versions (
+                    id TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL,
+                    version_number INTEGER NOT NULL,
+                    source TEXT NOT NULL,
+                    created_by TEXT,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(project_id, version_number),
+                    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_project_versions_project_number
+                    ON project_versions(project_id, version_number DESC);
+
+                CREATE TABLE IF NOT EXISTS version_nodes (
+                    version_id TEXT NOT NULL,
+                    id TEXT NOT NULL,
+                    label TEXT NOT NULL,
+                    type TEXT NOT NULL,
+                    owner TEXT NOT NULL,
+                    criticality INTEGER NOT NULL,
+                    PRIMARY KEY (version_id, id),
+                    FOREIGN KEY (version_id) REFERENCES project_versions(id) ON DELETE CASCADE
+                );
+
+                CREATE TABLE IF NOT EXISTS version_edges (
+                    version_id TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    target TEXT NOT NULL,
+                    relation TEXT NOT NULL,
+                    reason TEXT NOT NULL,
+                    FOREIGN KEY (version_id) REFERENCES project_versions(id) ON DELETE CASCADE
+                );
                 """
             )
             user_columns = {
@@ -113,10 +147,48 @@ class ProjectStore:
                 connection.execute(
                     "ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0"
                 )
+            self._backfill_project_versions(connection)
 
     @staticmethod
     def _now() -> str:
         return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+    def _backfill_project_versions(self, connection: sqlite3.Connection) -> None:
+        projects = connection.execute(
+            """
+            SELECT p.id, p.created_at
+            FROM projects p
+            WHERE NOT EXISTS (
+                SELECT 1 FROM project_versions pv WHERE pv.project_id = p.id
+            )
+            """
+        ).fetchall()
+        for project in projects:
+            version_id = f"VER-{uuid.uuid4().hex[:12].upper()}"
+            connection.execute(
+                """
+                INSERT INTO project_versions(
+                    id, project_id, version_number, source, created_by, created_at
+                ) VALUES (?, ?, 1, 'migration', NULL, ?)
+                """,
+                (version_id, project["id"], project["created_at"]),
+            )
+            connection.execute(
+                """
+                INSERT INTO version_nodes(version_id, id, label, type, owner, criticality)
+                SELECT ?, id, label, type, owner, criticality
+                FROM nodes WHERE project_id = ?
+                """,
+                (version_id, project["id"]),
+            )
+            connection.execute(
+                """
+                INSERT INTO version_edges(version_id, source, target, relation, reason)
+                SELECT ?, source, target, relation, reason
+                FROM edges WHERE project_id = ?
+                """,
+                (version_id, project["id"]),
+            )
 
     def has_project(self, project_id: str) -> bool:
         with self._connect() as connection:
@@ -125,10 +197,18 @@ class ProjectStore:
             ).fetchone()
         return row is not None
 
-    def save_project(self, project_id: str, name: str, graph: TraceGraph) -> None:
+    def save_project(
+        self,
+        project_id: str,
+        name: str,
+        graph: TraceGraph,
+        source: str = "csv",
+        created_by: str | None = None,
+    ) -> dict:
         timestamp = self._now()
         edges = [edge for group in graph.adjacency.values() for edge in group]
         with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
             connection.execute(
                 """
                 INSERT INTO projects(id, name, created_at, updated_at)
@@ -136,6 +216,31 @@ class ProjectStore:
                 ON CONFLICT(id) DO UPDATE SET name = excluded.name, updated_at = excluded.updated_at
                 """,
                 (project_id, name, timestamp, timestamp),
+            )
+            version_number = int(
+                connection.execute(
+                    """
+                    SELECT COALESCE(MAX(version_number), 0) + 1 AS next_version
+                    FROM project_versions WHERE project_id = ?
+                    """,
+                    (project_id,),
+                ).fetchone()["next_version"]
+            )
+            version_id = f"VER-{uuid.uuid4().hex[:12].upper()}"
+            connection.execute(
+                """
+                INSERT INTO project_versions(
+                    id, project_id, version_number, source, created_by, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    version_id,
+                    project_id,
+                    version_number,
+                    source[:32] or "csv",
+                    created_by,
+                    timestamp,
+                ),
             )
             connection.execute("DELETE FROM nodes WHERE project_id = ?", (project_id,))
             connection.execute("DELETE FROM edges WHERE project_id = ?", (project_id,))
@@ -159,6 +264,50 @@ class ProjectStore:
                     for edge in edges
                 ],
             )
+            connection.executemany(
+                """
+                INSERT INTO version_nodes(
+                    version_id, id, label, type, owner, criticality
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        version_id,
+                        node.id,
+                        node.label,
+                        node.type,
+                        node.owner,
+                        node.criticality,
+                    )
+                    for node in graph.nodes.values()
+                ],
+            )
+            connection.executemany(
+                """
+                INSERT INTO version_edges(version_id, source, target, relation, reason)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        version_id,
+                        edge.source,
+                        edge.target,
+                        edge.relation,
+                        edge.reason,
+                    )
+                    for edge in edges
+                ],
+            )
+        return {
+            "id": version_id,
+            "project_id": project_id,
+            "version_number": version_number,
+            "source": source[:32] or "csv",
+            "created_by": created_by,
+            "created_at": timestamp,
+            "node_count": len(graph.nodes),
+            "edge_count": len(edges),
+        }
 
     def load_graph(self, project_id: str) -> TraceGraph:
         with self._connect() as connection:
@@ -191,11 +340,13 @@ class ProjectStore:
                     SELECT p.id, p.name, p.created_at, p.updated_at,
                            COUNT(DISTINCT n.id) AS node_count,
                            COUNT(DISTINCT e.rowid) AS edge_count,
+                           COUNT(DISTINCT pv.id) AS version_count,
                            pm.access_level
                     FROM projects p
                     JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = ?
                     LEFT JOIN nodes n ON n.project_id = p.id
                     LEFT JOIN edges e ON e.project_id = p.id
+                    LEFT JOIN project_versions pv ON pv.project_id = p.id
                     GROUP BY p.id, pm.access_level
                     ORDER BY p.updated_at DESC
                     """,
@@ -206,15 +357,179 @@ class ProjectStore:
                     """
                 SELECT p.id, p.name, p.created_at, p.updated_at,
                        COUNT(DISTINCT n.id) AS node_count,
-                       COUNT(DISTINCT e.rowid) AS edge_count
+                       COUNT(DISTINCT e.rowid) AS edge_count,
+                       COUNT(DISTINCT pv.id) AS version_count
                 FROM projects p
                 LEFT JOIN nodes n ON n.project_id = p.id
                 LEFT JOIN edges e ON e.project_id = p.id
+                LEFT JOIN project_versions pv ON pv.project_id = p.id
                 GROUP BY p.id
                 ORDER BY p.updated_at DESC
                     """
                 ).fetchall()
         return [dict(row) for row in rows]
+
+    def list_project_versions(self, project_id: str) -> list[dict]:
+        with self._connect() as connection:
+            if not connection.execute(
+                "SELECT 1 FROM projects WHERE id = ?", (project_id,)
+            ).fetchone():
+                raise KeyError(f"Proje bulunamadı: {project_id}")
+            rows = connection.execute(
+                """
+                SELECT pv.id, pv.project_id, pv.version_number, pv.source,
+                       pv.created_by, pv.created_at,
+                       COALESCE(u.email, 'Sistem') AS created_by_email,
+                       COUNT(DISTINCT vn.id) AS node_count,
+                       COUNT(DISTINCT ve.rowid) AS edge_count
+                FROM project_versions pv
+                LEFT JOIN users u ON u.id = pv.created_by
+                LEFT JOIN version_nodes vn ON vn.version_id = pv.id
+                LEFT JOIN version_edges ve ON ve.version_id = pv.id
+                WHERE pv.project_id = ?
+                GROUP BY pv.id
+                ORDER BY pv.version_number DESC
+                """,
+                (project_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def compare_project_versions(
+        self, project_id: str, from_version_id: str, to_version_id: str
+    ) -> dict:
+        if from_version_id == to_version_id:
+            raise ValueError("Karşılaştırma için iki farklı sürüm seçilmelidir.")
+        with self._connect() as connection:
+            version_rows = connection.execute(
+                """
+                SELECT id, project_id, version_number, source, created_at
+                FROM project_versions
+                WHERE project_id = ? AND id IN (?, ?)
+                """,
+                (project_id, from_version_id, to_version_id),
+            ).fetchall()
+            versions = {row["id"]: dict(row) for row in version_rows}
+            if from_version_id not in versions or to_version_id not in versions:
+                raise KeyError("Seçilen sürümler bu projede bulunamadı.")
+
+            from_nodes = {
+                row["id"]: dict(row)
+                for row in connection.execute(
+                    """
+                    SELECT id, label, type, owner, criticality
+                    FROM version_nodes WHERE version_id = ?
+                    """,
+                    (from_version_id,),
+                ).fetchall()
+            }
+            to_nodes = {
+                row["id"]: dict(row)
+                for row in connection.execute(
+                    """
+                    SELECT id, label, type, owner, criticality
+                    FROM version_nodes WHERE version_id = ?
+                    """,
+                    (to_version_id,),
+                ).fetchall()
+            }
+            from_edges = {
+                (row["source"], row["target"], row["relation"]): dict(row)
+                for row in connection.execute(
+                    """
+                    SELECT source, target, relation, reason
+                    FROM version_edges WHERE version_id = ?
+                    """,
+                    (from_version_id,),
+                ).fetchall()
+            }
+            to_edges = {
+                (row["source"], row["target"], row["relation"]): dict(row)
+                for row in connection.execute(
+                    """
+                    SELECT source, target, relation, reason
+                    FROM version_edges WHERE version_id = ?
+                    """,
+                    (to_version_id,),
+                ).fetchall()
+            }
+
+        node_changes = self._compare_entities(
+            from_nodes,
+            to_nodes,
+            ("label", "type", "owner", "criticality"),
+            lambda key: str(key),
+        )
+        edge_changes = self._compare_entities(
+            from_edges,
+            to_edges,
+            ("reason",),
+            lambda key: f"{key[0]} → {key[1]} ({key[2]})",
+        )
+        summary = {
+            "nodes_added": sum(item["change"] == "added" for item in node_changes),
+            "nodes_removed": sum(item["change"] == "removed" for item in node_changes),
+            "nodes_modified": sum(item["change"] == "modified" for item in node_changes),
+            "edges_added": sum(item["change"] == "added" for item in edge_changes),
+            "edges_removed": sum(item["change"] == "removed" for item in edge_changes),
+            "edges_modified": sum(item["change"] == "modified" for item in edge_changes),
+        }
+        summary["total_changes"] = sum(summary.values())
+        return {
+            "project_id": project_id,
+            "from_version": versions[from_version_id],
+            "to_version": versions[to_version_id],
+            "summary": summary,
+            "node_changes": node_changes,
+            "edge_changes": edge_changes,
+        }
+
+    @staticmethod
+    def _compare_entities(
+        before: dict,
+        after: dict,
+        comparable_fields: tuple[str, ...],
+        identity_label,
+    ) -> list[dict]:
+        changes: list[dict] = []
+        before_keys = set(before)
+        after_keys = set(after)
+        for key in sorted(after_keys - before_keys, key=str):
+            changes.append(
+                {
+                    "change": "added",
+                    "identity": identity_label(key),
+                    "fields": list(comparable_fields),
+                    "before": None,
+                    "after": after[key],
+                }
+            )
+        for key in sorted(before_keys - after_keys, key=str):
+            changes.append(
+                {
+                    "change": "removed",
+                    "identity": identity_label(key),
+                    "fields": list(comparable_fields),
+                    "before": before[key],
+                    "after": None,
+                }
+            )
+        for key in sorted(before_keys & after_keys, key=str):
+            fields = [
+                field
+                for field in comparable_fields
+                if before[key][field] != after[key][field]
+            ]
+            if fields:
+                changes.append(
+                    {
+                        "change": "modified",
+                        "identity": identity_label(key),
+                        "fields": fields,
+                        "before": before[key],
+                        "after": after[key],
+                    }
+                )
+        return changes
 
     def save_analysis(self, project_id: str, result: dict) -> str:
         analysis_id = f"NXT-{uuid.uuid4().hex[:12].upper()}"

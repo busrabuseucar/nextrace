@@ -39,7 +39,9 @@ def ensure_demo_project() -> None:
     if STORE.has_project("demo"):
         return
     graph = TraceGraph.from_csv_files(DATA_DIR / "nodes.csv", DATA_DIR / "edges.csv")
-    STORE.save_project("demo", "AQUILA / Uçuş Kontrol Sistemi", graph)
+    STORE.save_project(
+        "demo", "AQUILA / Uçuş Kontrol Sistemi", graph, source="seed"
+    )
 
 
 ensure_demo_project()
@@ -237,6 +239,49 @@ class NexTraceHandler(SimpleHTTPRequestHandler):
                 return
             self._json({"analyses": STORE.list_analyses(project_id, limit)})
             return
+        if path == "/api/projects/versions":
+            user = self._require_auth()
+            if not user:
+                return
+            project_id = parse_qs(parsed.query).get("project_id", ["demo"])[0].strip()
+            if not STORE.has_project(project_id):
+                self._json({"error": f"Proje bulunamadı: {project_id}"}, HTTPStatus.NOT_FOUND)
+                return
+            if not self._require_project_access(user, project_id):
+                return
+            self._json({"versions": STORE.list_project_versions(project_id)})
+            return
+        if path == "/api/projects/diff":
+            user = self._require_auth()
+            if not user:
+                return
+            query = parse_qs(parsed.query)
+            project_id = query.get("project_id", ["demo"])[0].strip()
+            from_version = query.get("from_version", [""])[0].strip()
+            to_version = query.get("to_version", [""])[0].strip()
+            if not from_version or not to_version:
+                self._json(
+                    {"error": "from_version ve to_version zorunludur."},
+                    HTTPStatus.BAD_REQUEST,
+                )
+                return
+            if not STORE.has_project(project_id):
+                self._json({"error": f"Proje bulunamadı: {project_id}"}, HTTPStatus.NOT_FOUND)
+                return
+            if not self._require_project_access(user, project_id):
+                return
+            try:
+                comparison = STORE.compare_project_versions(
+                    project_id, from_version, to_version
+                )
+            except KeyError as exc:
+                self._json({"error": str(exc).strip("'")}, HTTPStatus.NOT_FOUND)
+                return
+            except ValueError as exc:
+                self._json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+                return
+            self._json(comparison)
+            return
         if path == "/api/users":
             user = self._require_auth()
             if not user or not self._require_admin(user):
@@ -301,7 +346,7 @@ class NexTraceHandler(SimpleHTTPRequestHandler):
             if path == "/api/projects/import":
                 if not self._require_admin(user):
                     return
-                self._handle_import(payload)
+                self._handle_import(payload, user)
                 return
             if path == "/api/users":
                 if not self._require_admin(user):
@@ -455,7 +500,7 @@ class NexTraceHandler(SimpleHTTPRequestHandler):
         analysis_id = STORE.save_analysis(project_id, result)
         self._json({"analysis_id": analysis_id, "project_id": project_id, **result})
 
-    def _handle_import(self, payload: dict) -> None:
+    def _handle_import(self, payload: dict, user: dict) -> None:
         project_id = str(payload.get("project_id", "uploaded")).strip()
         if not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", project_id):
             raise ValueError("project_id yalnızca harf, sayı, nokta, tire ve alt çizgi içerebilir.")
@@ -465,13 +510,20 @@ class NexTraceHandler(SimpleHTTPRequestHandler):
         if not isinstance(nodes_csv, str) or not isinstance(edges_csv, str):
             raise ValueError("nodes_csv ve edges_csv metin olarak gönderilmelidir.")
         graph = TraceGraph.from_csv_text(nodes_csv, edges_csv)
-        STORE.save_project(project_id, project_name, graph)
+        version = STORE.save_project(
+            project_id,
+            project_name,
+            graph,
+            source="csv",
+            created_by=user["id"],
+        )
         self._json(
             {
                 "project_id": project_id,
+                "version": version,
                 "node_count": len(graph.nodes),
                 "edge_count": sum(len(edges) for edges in graph.adjacency.values()),
-                "message": "Proje grafiği başarıyla yüklendi.",
+                "message": f"Proje grafiğinin v{version['version_number']} sürümü kaydedildi.",
             },
             HTTPStatus.CREATED,
         )

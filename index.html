@@ -38,6 +38,10 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v5m0 0H6v5m6-5h6v5M6 13v5h12v-5M3 18h6m6 0h6"/></svg>
           <span>Sistem mimarisi</span>
         </button>
+        <button class="nav-item" type="button" data-view="versions">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10v10H7zM4 4h10M4 4v10m16-4v10H10"/></svg>
+          <span>Sürüm farkı</span>
+        </button>
         <button class="nav-item" type="button" data-view="evidence">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l3 3v15H6zM15 3v4h4M9 12h6m-6 4h6"/></svg>
           <span>Kanıt günlüğü</span>
@@ -69,8 +73,8 @@
         <article class="import-card" id="importCard">
           <div class="import-copy">
             <p class="eyebrow">Gerçek veri girişi</p>
-            <h2>İzlenebilirlik grafiğini CSV’den yükle</h2>
-            <p>Varlık ve ilişki dosyalarını içe aktar; ardından değişen düğüm kimliği üzerinden canlı etki analizi çalıştır.</p>
+            <h2>Aktif projenin yeni sürümünü yükle</h2>
+            <p>Varlık ve ilişki CSV’lerini içe aktar; mevcut sürüm korunur ve yeni grafik ayrı bir sürüm olarak kaydedilir.</p>
           </div>
           <div class="import-controls">
             <label>Düğümler CSV
@@ -79,7 +83,7 @@
             <label>İlişkiler CSV
               <input id="edgesFile" type="file" accept=".csv,text/csv" />
             </label>
-            <button class="secondary-button" id="importButton" type="button">Grafiği yükle</button>
+            <button class="secondary-button" id="importButton" type="button">Yeni sürümü yükle</button>
           </div>
           <p class="import-status" id="importStatus" role="status">Aktif veri kümesi: sentetik demo grafiği</p>
         </article>
@@ -193,6 +197,50 @@
           <article><span>02</span><div><h3>Açıklanabilir karar</h3><p>Her risk puanı, kaynak varlığa uzanan denetlenebilir ilişki yoluyla gösterilir.</p></div></article>
           <article><span>03</span><div><h3>Kurumsal güvenlik</h3><p>Özel bulut/on-prem kurulum, rol tabanlı erişim ve değiştirilemez denetim kaydı desteklenir.</p></div></article>
         </div>
+      </section>
+
+      <section class="view" id="versionsView" data-view-panel="versions">
+        <div class="page-heading">
+          <div>
+            <p class="eyebrow">Yapılandırma kontrolü</p>
+            <h1>Grafik Sürümleri ve Farklar</h1>
+            <p>İki izlenebilirlik grafiğini karşılaştır; eklenen, kaldırılan ve değiştirilen mühendislik varlıklarını kanıtlarıyla gör.</p>
+          </div>
+          <span class="version-chip" id="versionCountChip">Sürüm yükleniyor</span>
+        </div>
+
+        <article class="version-compare-card">
+          <div class="version-controls">
+            <label>Başlangıç sürümü<select id="fromVersion"></select></label>
+            <span class="version-arrow" aria-hidden="true">→</span>
+            <label>Hedef sürüm<select id="toVersion"></select></label>
+            <button class="primary-button" id="compareVersionsButton" type="button">Farkları karşılaştır</button>
+          </div>
+          <p class="version-message" id="versionMessage" role="status">Sürüm geçmişi alınıyor…</p>
+        </article>
+
+        <div class="diff-summary-grid" aria-live="polite">
+          <article><span class="diff-dot added"></span><strong id="diffAdded">—</strong><small>Eklenen</small></article>
+          <article><span class="diff-dot removed"></span><strong id="diffRemoved">—</strong><small>Kaldırılan</small></article>
+          <article><span class="diff-dot modified"></span><strong id="diffModified">—</strong><small>Değiştirilen</small></article>
+          <article><span class="diff-dot total"></span><strong id="diffTotal">—</strong><small>Toplam fark</small></article>
+        </div>
+
+        <div class="version-results-grid">
+          <article class="diff-card">
+            <div class="card-heading"><div><p class="eyebrow">Varlık değişiklikleri</p><h2>Düğümler</h2></div></div>
+            <div class="table-wrap"><table><thead><tr><th>Değişiklik</th><th>Düğüm</th><th>Değişen alanlar</th></tr></thead><tbody id="nodeDiffTable"><tr class="placeholder-row"><td colspan="3">Karşılaştırma bekleniyor.</td></tr></tbody></table></div>
+          </article>
+          <article class="diff-card">
+            <div class="card-heading"><div><p class="eyebrow">Bağlantı değişiklikleri</p><h2>İlişkiler</h2></div></div>
+            <div class="table-wrap"><table><thead><tr><th>Değişiklik</th><th>İlişki</th><th>Değişen alanlar</th></tr></thead><tbody id="edgeDiffTable"><tr class="placeholder-row"><td colspan="3">Karşılaştırma bekleniyor.</td></tr></tbody></table></div>
+          </article>
+        </div>
+
+        <article class="version-history-card">
+          <div class="card-heading"><div><p class="eyebrow">Değiştirilemez kayıt</p><h2>Sürüm geçmişi</h2></div></div>
+          <div class="version-history" id="versionHistory"></div>
+        </article>
       </section>
 
       <section class="view" id="evidenceView" data-view-panel="evidence">
