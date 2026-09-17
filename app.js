@@ -88,6 +88,7 @@ const passwordForm = document.querySelector("#passwordForm");
 const passwordMessage = document.querySelector("#passwordMessage");
 const passwordCancel = document.querySelector("#passwordCancel");
 const accessNav = document.querySelector("#accessNav");
+const connectorNav = document.querySelector("#connectorNav");
 const importCard = document.querySelector("#importCard");
 const fromVersion = document.querySelector("#fromVersion");
 const toVersion = document.querySelector("#toVersion");
@@ -137,9 +138,14 @@ function hideAuthGate(user) {
   passwordGate.hidden = true;
   const isAdmin = user.role === "admin";
   accessNav.hidden = !isAdmin;
+  connectorNav.hidden = !isAdmin;
   importCard.hidden = !isAdmin;
   loadAvailableProjects();
-  if (isAdmin) loadAccessData();
+  if (isAdmin) {
+    loadAccessData();
+  } else if (document.querySelector('[data-view-panel="access"].active, [data-view-panel="connectors"].active')) {
+    document.querySelector('[data-view="analysis"]').click();
+  }
 }
 
 function showPasswordGate(forced = false) {
@@ -236,7 +242,10 @@ function resetVersionDiff() {
 }
 
 function versionSourceLabel(source) {
-  return { seed: "Başlangıç", csv: "CSV", migration: "Aktarılan" }[source] || source;
+  return {
+    seed: "Başlangıç", csv: "CSV", migration: "Aktarılan",
+    jira: "Jira", gitlab: "GitLab", "jira+gitlab": "Jira + GitLab"
+  }[source] || source;
 }
 
 function renderVersionHistory() {
@@ -405,6 +414,75 @@ async function loadAccessData() {
   } catch (error) {
     userStatus.className = "admin-status error";
     userStatus.textContent = error.message;
+  }
+}
+
+function renderConnectorState(name, connector) {
+  const state = document.querySelector(`#${name}ConnectorState`);
+  const origin = document.querySelector(`#${name}ConnectorOrigin`);
+  state.textContent = connector.configured ? "Hazır" : "Yapılandırılmadı";
+  state.className = `connector-state${connector.configured ? " ready" : ""}`;
+  origin.textContent = connector.base_url || "Sunucu ortam değişkenleri bekleniyor";
+}
+
+async function loadConnectorStatus() {
+  if (currentUser?.role !== "admin") return;
+  try {
+    const response = await apiFetch("/api/connectors/status", { cache: "no-store" });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Bağlayıcı durumu alınamadı.");
+    renderConnectorState("jira", result.connectors.jira);
+    renderConnectorState("gitlab", result.connectors.gitlab);
+  } catch (error) {
+    ["jira", "gitlab"].forEach(name => {
+      const state = document.querySelector(`#${name}ConnectorState`);
+      state.className = "connector-state";
+      state.textContent = "Durum alınamadı";
+    });
+    document.querySelector("#connectorSyncStatus").className = "admin-status error";
+    document.querySelector("#connectorSyncStatus").textContent = error.message;
+  }
+}
+
+async function syncConnectors(event) {
+  event.preventDefault();
+  const status = document.querySelector("#connectorSyncStatus");
+  const button = document.querySelector("#connectorSyncButton");
+  const jiraProjectKey = document.querySelector("#jiraProjectKey").value.trim();
+  const gitlabProject = document.querySelector("#gitlabProjectPath").value.trim();
+  if (!jiraProjectKey && !gitlabProject) {
+    status.className = "admin-status error connector-sync-status";
+    status.textContent = "En az bir Jira veya GitLab proje bilgisi gir.";
+    return;
+  }
+  button.disabled = true;
+  button.textContent = "Eşitleniyor…";
+  status.className = "admin-status connector-sync-status";
+  status.textContent = "Kaynak kayıtları okunuyor ve grafik oluşturuluyor…";
+  try {
+    const response = await apiFetch("/api/connectors/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        project_id: document.querySelector("#connectorProjectId").value.trim(),
+        name: document.querySelector("#connectorProjectName").value.trim(),
+        jira_project_key: jiraProjectKey,
+        gitlab_project: gitlabProject
+      })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Kaynaklar eşitlenemedi.");
+    status.className = "admin-status connector-sync-status";
+    status.textContent = `${result.message} ${result.jira_issue_count} issue, ${result.gitlab_commit_count} commit ve ${result.edge_count} kanıt ilişkisi.`;
+    document.querySelector("#dataBadge").lastChild.textContent = " Jira / GitLab verisi";
+    currentProjectId = result.project_id;
+    await loadAvailableProjects(result.project_id);
+  } catch (error) {
+    status.className = "admin-status error connector-sync-status";
+    status.textContent = error.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = "Kaynakları eşitle";
   }
 }
 
@@ -684,6 +762,7 @@ document.querySelectorAll(".nav-item").forEach(button => {
     document.querySelectorAll(".view").forEach(view => view.classList.toggle("active", view.dataset.viewPanel === button.dataset.view));
     if (button.dataset.view === "access") loadAccessData();
     if (button.dataset.view === "versions") loadProjectVersions();
+    if (button.dataset.view === "connectors") loadConnectorStatus();
   });
 });
 
@@ -706,6 +785,7 @@ projectSelect.addEventListener("change", () => {
 analyzeButton.addEventListener("click", runAnalysis);
 importButton.addEventListener("click", importGraph);
 compareVersionsButton.addEventListener("click", compareProjectVersions);
+document.querySelector("#connectorSyncForm").addEventListener("submit", syncConnectors);
 document.querySelector("#createUserForm").addEventListener("submit", async event => {
   event.preventDefault();
   const status = document.querySelector("#createUserStatus");

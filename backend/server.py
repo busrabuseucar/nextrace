@@ -16,6 +16,13 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 from auth import AuthenticationError, AuthService
+from connectors import (
+    ConnectorError,
+    GitLabConnector,
+    JiraConnector,
+    build_trace_graph,
+    connector_status,
+)
 from engine import TraceGraph
 from storage import ProjectStore
 
@@ -294,6 +301,12 @@ class NexTraceHandler(SimpleHTTPRequestHandler):
                 return
             self._json({"memberships": STORE.list_project_access()})
             return
+        if path == "/api/connectors/status":
+            user = self._require_auth()
+            if not user or not self._require_admin(user):
+                return
+            self._json({"connectors": connector_status()})
+            return
         if not self._public_file_allowed(path):
             self._json({"error": "Kaynak bulunamadı."}, HTTPStatus.NOT_FOUND)
             return
@@ -368,9 +381,16 @@ class NexTraceHandler(SimpleHTTPRequestHandler):
                     return
                 self._handle_project_access(payload)
                 return
+            if path == "/api/connectors/sync":
+                if not self._require_admin(user):
+                    return
+                self._handle_connector_sync(payload, user)
+                return
             self._json({"error": "Uç nokta bulunamadı."}, HTTPStatus.NOT_FOUND)
         except KeyError as exc:
             self._json({"error": str(exc).strip("'")}, HTTPStatus.NOT_FOUND)
+        except ConnectorError as exc:
+            self._json({"error": str(exc)}, HTTPStatus.BAD_GATEWAY)
         except (TypeError, ValueError) as exc:
             self._json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
@@ -524,6 +544,59 @@ class NexTraceHandler(SimpleHTTPRequestHandler):
                 "node_count": len(graph.nodes),
                 "edge_count": sum(len(edges) for edges in graph.adjacency.values()),
                 "message": f"Proje grafiğinin v{version['version_number']} sürümü kaydedildi.",
+            },
+            HTTPStatus.CREATED,
+        )
+
+    def _handle_connector_sync(self, payload: dict, user: dict) -> None:
+        project_id = str(payload.get("project_id", "")).strip()
+        if not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", project_id):
+            raise ValueError(
+                "project_id yalnızca harf, sayı, nokta, tire ve alt çizgi içerebilir."
+            )
+        project_name = str(payload.get("name", project_id)).strip()[:120] or project_id
+        jira_project_key = str(payload.get("jira_project_key", "")).strip().upper()
+        gitlab_project = str(payload.get("gitlab_project", "")).strip()
+        if not jira_project_key and not gitlab_project:
+            raise ValueError("En az bir Jira proje anahtarı veya GitLab projesi girilmelidir.")
+        if jira_project_key and not re.fullmatch(r"[A-Z][A-Z0-9_]{1,19}", jira_project_key):
+            raise ValueError("Jira proje anahtarı geçersiz.")
+        if gitlab_project and (
+            len(gitlab_project) > 240
+            or any(ord(character) < 32 for character in gitlab_project)
+        ):
+            raise ValueError("GitLab proje kimliği veya yolu geçersiz.")
+
+        jira_issues: list[dict] = []
+        gitlab_commits: list[dict] = []
+        sources: list[str] = []
+        if jira_project_key:
+            jira_issues = JiraConnector.from_env().list_issues(jira_project_key)
+            sources.append("jira")
+        if gitlab_project:
+            gitlab_commits = GitLabConnector.from_env().list_commits(gitlab_project)
+            sources.append("gitlab")
+
+        graph, counts = build_trace_graph(
+            jira_issues=jira_issues,
+            gitlab_commits=gitlab_commits,
+            gitlab_project=gitlab_project,
+        )
+        version = STORE.save_project(
+            project_id,
+            project_name,
+            graph,
+            source="+".join(sources),
+            created_by=user["id"],
+        )
+        self._json(
+            {
+                "project_id": project_id,
+                "version": version,
+                **counts,
+                "message": (
+                    f"Jira/GitLab verisi v{version['version_number']} olarak eşitlendi."
+                ),
             },
             HTTPStatus.CREATED,
         )

@@ -6,6 +6,7 @@ node_modules/
 *.log
 .env
 .env.*
+!.env.example
 .openai/
 *.db
 *.db-shm

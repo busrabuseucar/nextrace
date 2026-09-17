@@ -46,6 +46,10 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l3 3v15H6zM15 3v4h4M9 12h6m-6 4h6"/></svg>
           <span>Kanıt günlüğü</span>
         </button>
+        <button class="nav-item" id="connectorNav" type="button" data-view="connectors" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 12h8M6 8h3v8H6a3 3 0 0 1 0-6h1m11-2h-3v8h3a3 3 0 0 0 0-6h-1"/></svg>
+          <span>Bağlayıcılar</span>
+        </button>
         <button class="nav-item" id="accessNav" type="button" data-view="access" hidden>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm7-2h5m-2.5-2.5v5M3 21v-2a6 6 0 0 1 12 0v2"/></svg>
           <span>Ekip ve erişim</span>
@@ -55,7 +59,7 @@
       <div class="source-health">
         <p>MVP durumu</p>
         <div><span class="health-dot ok"></span><b>API</b> çalışıyor</div>
-        <small>CSV grafiği yüklenebilir</small>
+        <small>CSV, Jira ve GitLab hazır</small>
       </div>
     </aside>
 
@@ -255,6 +259,51 @@
         <article class="audit-card">
           <div class="audit-topline"><span>Depolama</span><strong>SQLite</strong><span>Veri sürümü</span><strong>graph@2.4.1</strong><span>Durum</span><strong class="verified">Kalıcı kayıt açık</strong></div>
           <div id="auditTimeline" class="audit-timeline"></div>
+        </article>
+      </section>
+
+      <section class="view" id="connectorsView" data-view-panel="connectors">
+        <div class="page-heading">
+          <div>
+            <p class="eyebrow">Kaynak sistem entegrasyonu</p>
+            <h1>Jira ve GitLab Bağlayıcıları</h1>
+            <p>Gereksinimleri ve commit geçmişini kaynak sistemleri değiştirmeden oku; ortak izlenebilirlik grafiğine yeni, karşılaştırılabilir bir sürüm olarak kaydet.</p>
+          </div>
+          <span class="version-chip">Salt okunur</span>
+        </div>
+
+        <div class="connector-status-grid" aria-live="polite">
+          <article class="connector-status-card">
+            <div><span class="connector-logo jira">J</span><div><p class="eyebrow">Gereksinim kaynağı</p><h2>Jira Cloud</h2></div></div>
+            <span class="connector-state" id="jiraConnectorState">Kontrol ediliyor</span>
+            <small id="jiraConnectorOrigin">—</small>
+          </article>
+          <article class="connector-status-card">
+            <div><span class="connector-logo gitlab">GL</span><div><p class="eyebrow">Kod kaynağı</p><h2>GitLab</h2></div></div>
+            <span class="connector-state" id="gitlabConnectorState">Kontrol ediliyor</span>
+            <small id="gitlabConnectorOrigin">—</small>
+          </article>
+        </div>
+
+        <article class="connector-sync-card">
+          <div class="connector-copy">
+            <p class="eyebrow">Yeni grafik sürümü</p>
+            <h2>Kaynakları eşitle</h2>
+            <p>Jira issue bağlantıları ve commit mesajlarındaki Jira anahtarları kanıt ilişkisine dönüştürülür. Anahtarlar yalnızca sunucu ortamından okunur ve NexTrace veritabanına kaydedilmez.</p>
+            <ul>
+              <li>Jira: issue, öncelik, sorumlu ve issue bağlantıları</li>
+              <li>GitLab: depo ve commit başlığı/yazarı</li>
+              <li>Ortak anahtar: commit mesajındaki ör. <code>AQUILA-142</code></li>
+            </ul>
+          </div>
+          <form class="connector-form" id="connectorSyncForm">
+            <label>NexTrace proje kimliği<input id="connectorProjectId" value="nextrace-pilot" pattern="[A-Za-z0-9._-]{1,64}" maxlength="64" required /></label>
+            <label>Proje adı<input id="connectorProjectName" value="NexTrace Pilot Grafiği" maxlength="120" required /></label>
+            <label>Jira proje anahtarı<input id="jiraProjectKey" placeholder="AQUILA" maxlength="20" /></label>
+            <label>GitLab proje kimliği veya yolu<input id="gitlabProjectPath" placeholder="grup/proje" maxlength="240" /></label>
+            <button class="primary-button" id="connectorSyncButton" type="submit">Kaynakları eşitle</button>
+            <p class="admin-status connector-sync-status" id="connectorSyncStatus" role="status"></p>
+          </form>
         </article>
       </section>
 
