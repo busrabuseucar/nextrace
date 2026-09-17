@@ -1,0 +1,22 @@
+source,target,relation,reason
+SYS-REQ-142,INT-017,tanımlar,Yanıt süresi sözleşmesi doğrudan değiştirilen gecikme eşiğini referanslıyor.
+SYS-REQ-142,TC-408,doğrulanır,Kabul kriteri mevcut gecikme üst sınırını doğruluyor; test verisi ve eşik güncellenmeli.
+INT-017,SW-203,uygulanır,Zamanlayıcı kuyruğu mevcut gecikme bütçesine göre yapılandırılmış.
+INT-017,SAF-09,izlenir,Paket kaybı olasılığı yeni gecikme hedefiyle yeniden değerlendirilmelidir.
+INT-017,CFG-12,yapılandırır,Üretim timeout değeri yeni hedefin üzerinde kalıyor.
+SW-203,TC-412,test edilir,Yeniden deneme penceresi toplam gecikme bütçesini aşabilir.
+INT-017,DOC-77,belgelenir,Arayüz kontrol dokümanı eski zamanlama değerini içeriyor.
+SW-203,REL-31,sürümlenir,Değişiklik dondurulmuş yazılım temel çizgisini etkiliyor.
+SEC-REQ-055,SEC-API-4,tanımlar,Anahtar uzunluğu ve algoritma kimliği servis sözleşmesinde sabit.
+SEC-REQ-055,TC-509,doğrulanır,Test vektörleri ve sertifika profili yeni algoritmayı kapsamıyor.
+SEC-REQ-055,DOC-91,belgelenir,Tehdit modeli ve algoritma seçimi bölümü eski standardı içeriyor.
+SEC-API-4,SW-318,uygulanır,Mevcut sağlayıcı yapılandırması önceki şifreleme profilini kullanıyor.
+SEC-API-4,KEY-7,yönetilir,Anahtar yaşam döngüsü belgesi algoritma değişikliğine bağlanmalı.
+SW-318,PERF-22,etkiler,Şifreleme maliyeti görev bilgisayarı işlem bütçesini etkileyebilir.
+SNS-REQ-021,BUS-11,tanımlar,Artan mesaj sıklığı veri yolu kullanım oranını yükseltiyor.
+SNS-REQ-021,SW-141,uygulanır,Filtre katsayıları mevcut örnekleme periyoduna göre hesaplanmış.
+BUS-11,TC-244,test edilir,Mevcut test yalnızca önceki örnekleme üst sınırını doğruluyor.
+BUS-11,DOC-32,belgelenir,Mesaj periyodu ve bant genişliği tabloları güncellenmeli.
+SW-141,RT-06,etkiler,Görev yürütme süresi yeni periyotta zaman aşımına yaklaşabilir.
+SW-141,SIM-4,modellenir,Simülasyon veri adımı yeni örnekleme süresiyle eşleşmiyor.
+

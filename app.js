@@ -1,6 +1,7 @@
 const scenarios = {
   latency: {
     id: "CR-028",
+    sourceNode: "SYS-REQ-142",
     current: "250 ms",
     proposed: "150 ms",
     description: "SYS-REQ-142 telemetri paketlerinin en yüksek yük altında uçtan uca iletim eşiğini düşürür.",
@@ -21,6 +22,7 @@ const scenarios = {
   },
   encryption: {
     id: "CR-031",
+    sourceNode: "SEC-REQ-055",
     current: "AES-128",
     proposed: "AES-256",
     description: "SEC-REQ-055 yer istasyonu ile hava aracı arasındaki telemetri şifreleme standardını yükseltir.",
@@ -39,6 +41,7 @@ const scenarios = {
   },
   sampling: {
     id: "CR-044",
+    sourceNode: "SNS-REQ-021",
     current: "60 Hz",
     proposed: "100 Hz",
     description: "SNS-REQ-021 uçuş kontrol sensörlerinin örnekleme sıklığını artırır.",
@@ -71,9 +74,13 @@ const analysisState = document.querySelector("#analysisState");
 const evidenceTable = document.querySelector("#evidenceTable");
 const traceGraph = document.querySelector("#traceGraph");
 const graphStage = document.querySelector("#graphStage");
+const changedNodeInput = document.querySelector("#changedNodeInput");
+const importButton = document.querySelector("#importButton");
+const importStatus = document.querySelector("#importStatus");
 let currentScenario = scenarios.latency;
 let currentFilter = "all";
 let analyzed = false;
+let currentProjectId = "demo";
 
 function updateScenarioText() {
   currentScenario = scenarios[scenarioSelect.value];
@@ -81,6 +88,7 @@ function updateScenarioText() {
   document.querySelector("#currentValue").textContent = currentScenario.current;
   document.querySelector("#proposedValue").textContent = currentScenario.proposed;
   document.querySelector("#scenarioDescription").textContent = currentScenario.description;
+  if (currentProjectId === "demo") changedNodeInput.value = currentScenario.sourceNode;
   resetAnalysis();
 }
 
@@ -103,6 +111,12 @@ function riskLabel(risk) {
   return { critical: "Kritik", high: "Yüksek", medium: "Orta" }[risk];
 }
 
+function escapeHtml(value) {
+  return String(value).replace(/[&<>'"]/g, character => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;"
+  })[character]);
+}
+
 function renderSummary() {
   const critical = currentScenario.items.filter(item => item.risk === "critical").length;
   document.querySelector("#summaryTitle").textContent = currentScenario.summary;
@@ -116,12 +130,12 @@ function renderSummary() {
 function renderTable() {
   const filtered = currentScenario.items.filter(item => currentFilter === "all" || item.risk === currentFilter);
   evidenceTable.innerHTML = filtered.map(item => `
-    <tr data-item-id="${item.id}">
-      <td class="artifact-cell"><strong>${item.label}</strong><span>${item.id}</span></td>
-      <td>${item.type}</td>
-      <td>${item.path}</td>
+    <tr data-item-id="${escapeHtml(item.id)}">
+      <td class="artifact-cell"><strong>${escapeHtml(item.label)}</strong><span>${escapeHtml(item.id)}</span></td>
+      <td>${escapeHtml(item.type)}</td>
+      <td>${escapeHtml(item.path)}</td>
       <td><span class="risk-pill ${item.risk}">${riskLabel(item.risk)}</span></td>
-      <td><span class="status-pill">${item.status}</span></td>
+      <td><span class="status-pill">${escapeHtml(item.status)}</span></td>
     </tr>`).join("");
   evidenceTable.querySelectorAll("tr[data-item-id]").forEach(row => {
     row.addEventListener("click", () => openDrawer(currentScenario.items.find(item => item.id === row.dataset.itemId)));
@@ -136,11 +150,22 @@ function createSvg(tag, attrs = {}) {
 
 function renderGraph() {
   traceGraph.innerHTML = "";
-  const root = { id: currentScenario.id, label: currentScenario.description.split(" ").slice(0, 4).join(" "), risk: "source", score: null };
+  const root = { id: changedNodeInput.value.trim(), label: "Değişiklik kaynağı", risk: "source", score: null };
   const items = [root, ...currentScenario.items.slice(0, 8)];
-  const edges = [
-    [0,1],[0,2],[0,3],[1,4],[1,5],[2,5],[2,6],[3,6],[3,7],[5,8]
-  ].filter(([,to]) => to < items.length);
+  const itemIndexes = new Map(items.map((item, index) => [item.id, index]));
+  const edges = [];
+  const edgeKeys = new Set();
+  items.slice(1).forEach((item, itemOffset) => {
+    const path = item.path.split("→").map(part => part.trim()).filter(Boolean);
+    const predecessor = path.at(-2);
+    const from = itemIndexes.get(predecessor) ?? 0;
+    const to = itemOffset + 1;
+    const edgeKey = `${from}-${to}`;
+    if (!edgeKeys.has(edgeKey)) {
+      edgeKeys.add(edgeKey);
+      edges.push([from, to]);
+    }
+  });
 
   edges.forEach(([from, to], index) => {
     const a = graphPositions[from];
@@ -176,28 +201,89 @@ function renderGraph() {
   });
 }
 
-function runAnalysis() {
+async function runAnalysis() {
   analyzeButton.disabled = true;
   analyzeButtonLabel.textContent = "Graf taranıyor…";
   analysisState.className = "analysis-state running";
   analysisState.innerHTML = "<span></span> Kaynak ilişkileri taranıyor";
   graphStage.classList.remove("analyzed");
-  setTimeout(() => {
-    analysisState.innerHTML = "<span></span> Risk puanları hesaplanıyor";
-    analyzeButtonLabel.textContent = "Risk puanlanıyor…";
-  }, 520);
-  setTimeout(() => {
+  try {
+    const changedNodeId = changedNodeInput.value.trim();
+    if (!changedNodeId) throw new Error("Değişen düğüm kimliği zorunludur.");
+    const response = await fetch("/api/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        project_id: currentProjectId,
+        changed_node_id: changedNodeId,
+        current_value: currentScenario.current,
+        proposed_value: currentScenario.proposed
+      })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Analiz tamamlanamadı.");
+
+    currentScenario = {
+      ...currentScenario,
+      items: result.items,
+      confidence: result.confidence,
+      summary: result.summary,
+      note: result.note,
+      pathCount: result.path_count
+    };
     analyzed = true;
     renderSummary();
     renderGraph();
     renderTable();
     graphStage.classList.add("analyzed");
     analysisState.className = "analysis-state complete";
-    analysisState.innerHTML = "<span></span> Analiz tamamlandı · 1,8 sn";
-    analyzeButton.disabled = false;
-    analyzeButtonLabel.textContent = "Analizi yeniden çalıştır";
+    analysisState.innerHTML = `<span></span> Analiz tamamlandı · ${result.duration_ms} ms`;
     buildAuditLog();
-  }, 1150);
+  } catch (error) {
+    analysisState.className = "analysis-state error";
+    analysisState.innerHTML = "<span></span>";
+    analysisState.append(document.createTextNode(` ${error.message}`));
+  } finally {
+    analyzeButton.disabled = false;
+    analyzeButtonLabel.textContent = analyzed ? "Analizi yeniden çalıştır" : "Etkiyi analiz et";
+  }
+}
+
+async function importGraph() {
+  const nodesFile = document.querySelector("#nodesFile").files[0];
+  const edgesFile = document.querySelector("#edgesFile").files[0];
+  if (!nodesFile || !edgesFile) {
+    importStatus.className = "import-status error";
+    importStatus.textContent = "İki CSV dosyasını da seçmelisin.";
+    return;
+  }
+
+  importButton.disabled = true;
+  importButton.textContent = "Yükleniyor…";
+  importStatus.className = "import-status";
+  importStatus.textContent = "CSV dosyaları doğrulanıyor…";
+  try {
+    const [nodesCsv, edgesCsv] = await Promise.all([nodesFile.text(), edgesFile.text()]);
+    const projectId = `uploaded-${Date.now()}`;
+    const response = await fetch("/api/projects/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ project_id: projectId, nodes_csv: nodesCsv, edges_csv: edgesCsv })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Grafik yüklenemedi.");
+    currentProjectId = result.project_id;
+    document.querySelector("#dataBadge").lastChild.textContent = " Yüklenen CSV verisi";
+    importStatus.className = "import-status success";
+    importStatus.textContent = `Aktif veri kümesi: ${result.node_count} düğüm, ${result.edge_count} ilişki`;
+    resetAnalysis();
+  } catch (error) {
+    importStatus.className = "import-status error";
+    importStatus.textContent = error.message;
+  } finally {
+    importButton.disabled = false;
+    importButton.textContent = "Grafiği yükle";
+  }
 }
 
 function openDrawer(item) {
@@ -222,12 +308,16 @@ function closeDrawer() {
 }
 
 function exportCsv() {
+  const safeCell = value => {
+    const text = String(value);
+    return /^[=+\-@]/.test(text) ? `'${text}` : text;
+  };
   const rows = [
     ["Analiz", currentScenario.id],
     ["Varlık", "Tür", "Kanıt yolu", "Risk", "Puan", "Durum", "Gerekçe"],
     ...currentScenario.items.map(item => [item.id, item.type, item.path, riskLabel(item.risk), item.score, item.status, item.reason])
   ];
-  const csv = rows.map(row => row.map(value => `"${String(value).replaceAll('"', '""')}"`).join(",")).join("\n");
+  const csv = rows.map(row => row.map(value => `"${safeCell(value).replaceAll('"', '""')}"`).join(",")).join("\n");
   const blob = new Blob(["\ufeff", csv], { type: "text/csv;charset=utf-8" });
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
@@ -264,6 +354,7 @@ document.querySelectorAll(".filter").forEach(button => {
 
 scenarioSelect.addEventListener("change", updateScenarioText);
 analyzeButton.addEventListener("click", runAnalysis);
+importButton.addEventListener("click", importGraph);
 document.querySelector("#drawerClose").addEventListener("click", closeDrawer);
 document.querySelector("#drawerScrim").addEventListener("click", closeDrawer);
 document.querySelector("#markReviewed").addEventListener("click", () => {

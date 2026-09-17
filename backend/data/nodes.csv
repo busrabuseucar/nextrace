@@ -1,0 +1,25 @@
+id,label,type,owner,criticality
+SYS-REQ-142,Telemetri gecikme gereksinimi,Gereksinim,Sistem Mühendisliği,0
+INT-017,Telemetri API sözleşmesi,Arayüz,Sistem Mühendisliği,3
+SW-203,Paket zamanlayıcı,Yazılım,Gömülü Yazılım,9
+TC-408,Tepe yük testi,Test,Doğrulama,1
+SAF-09,Telemetri hazard kaydı,Güvenlik,Emniyet,1
+CFG-12,Timeout yapılandırması,Konfigürasyon,DevOps,0
+TC-412,Yeniden deneme testi,Test,Doğrulama,-1
+DOC-77,Arayüz kontrol dokümanı,Doküman,Konfigürasyon,-6
+REL-31,Sürüm temel çizgisi,Sürüm,Konfigürasyon,-12
+SEC-REQ-055,Telemetri şifreleme gereksinimi,Gereksinim,Siber Güvenlik,0
+SEC-API-4,Kripto servis sözleşmesi,Arayüz,Siber Güvenlik,4
+SW-318,Kripto sağlayıcı,Yazılım,Platform Yazılımı,10
+PERF-22,CPU yük bütçesi,Performans,Sistem Mühendisliği,13
+TC-509,Kripto uyumluluk testi,Test,Doğrulama,-1
+KEY-7,Anahtar döndürme politikası,Politika,Siber Güvenlik,-12
+DOC-91,Güvenlik tasarım dokümanı,Doküman,Sistem Mühendisliği,-29
+SNS-REQ-021,Sensör örnekleme gereksinimi,Gereksinim,Sistem Mühendisliği,0
+BUS-11,Sensör veri yolu,Arayüz,Aviyonik,2
+SW-141,Sinyal filtreleme,Yazılım,Uçuş Yazılımı,8
+RT-06,Gerçek zamanlı görev bütçesi,Performans,Sistem Mühendisliği,15
+TC-244,Sensör bant genişliği testi,Test,Doğrulama,-1
+SIM-4,Uçuş dinamiği modeli,Simülasyon,Modelleme,-13
+DOC-32,Sensör ICD,Doküman,Konfigürasyon,-31
+

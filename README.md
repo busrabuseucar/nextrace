@@ -4,9 +4,9 @@ NexTrace AI, kritik mühendislik projelerinde bir değişikliğin gereksinim, ko
 
 ![NexTrace AI çalışan demo ekranı](docs/nextrace-dashboard.png)
 
-## Mevcut sürüm
+## Mevcut sürüm — çalışan MVP temeli
 
-Bu depo, ürün fikrini ve temel kullanıcı akışını doğrulamak için hazırlanmış **çalışan sentetik veri demosunu** içerir. Henüz gerçek kurum sistemlerine bağlanan üretim sürümü veya doğrulanmış müşteri pilotu değildir.
+Bu depo, ürün fikrini ve temel kullanıcı akışını doğrulayan **dinamik etki analizi motoru ile çalışan MVP temelini** içerir. Arayüz artık hazır sonuçları taklit etmez; Python API, yüklenen izlenebilirlik grafiğini tarayarak etkilenen varlıkları, kanıt yollarını ve risk puanlarını hesaplar. Henüz gerçek kurum sistemlerine doğrudan bağlanan üretim sürümü veya doğrulanmış müşteri pilotu değildir.
 
 Demoda üç örnek değişiklik senaryosu bulunur:
 
@@ -14,7 +14,7 @@ Demoda üç örnek değişiklik senaryosu bulunur:
 - Şifreleme standardının yükseltilmesi
 - Sensör örnekleme sıklığının artırılması
 
-Kullanıcı bir senaryo seçip etki analizini çalıştırdığında sistem:
+Kullanıcı örnek senaryolardan birini seçebilir veya kendi düğüm/ilişki CSV dosyalarını yükleyebilir. Analiz çalıştırıldığında sistem:
 
 - Etkilenen mühendislik varlıklarını,
 - Kritik, yüksek ve orta düzey riskleri,
@@ -25,13 +25,13 @@ görselleştirir.
 
 ## Çalıştırma
 
-Proje herhangi bir derleme adımı gerektirmeyen statik bir web uygulamasıdır.
+Proje üçüncü taraf paket gerektirmeyen Python API ve web arayüzünden oluşur. Python 3.10 veya üzeri önerilir.
 
 1. Depoyu indir veya klonla.
 2. Proje klasöründe basit bir yerel sunucu başlat:
 
    ```bash
-   python -m http.server 8000
+   python backend/server.py
    ```
 
 3. Tarayıcıda `http://localhost:8000` adresini aç.
@@ -43,6 +43,14 @@ Proje herhangi bir derleme adımı gerektirmeyen statik bir web uygulamasıdır.
 ├── index.html
 ├── styles.css
 ├── app.js
+├── backend/
+│   ├── server.py
+│   ├── engine.py
+│   └── data/
+│       ├── nodes.csv
+│       └── edges.csv
+├── tests/
+│   └── test_engine.py
 ├── docs/
 │   └── nextrace-dashboard.png
 └── assets/
@@ -50,13 +58,40 @@ Proje herhangi bir derleme adımı gerektirmeyen statik bir web uygulamasıdır.
     └── nextrace-architecture.png
 ```
 
-## Planlanan MVP kapsamı
+## CSV veri şeması
 
-- CSV/Excel üzerinden gereksinim, kod, test ve doküman verisi alma
-- Kaynak varlıklar arasında sürümlü izlenebilirlik grafiği oluşturma
-- Yeni değişiklik talepleri için dinamik etki ve risk analizi
-- Sonuçların gerekçesiyle ve kaynak yoluyla gösterilmesi
-- Kanıt raporunun dışa aktarılması
+`nodes.csv` sütunları:
+
+```text
+id,label,type,owner,criticality
+```
+
+`edges.csv` sütunları:
+
+```text
+source,target,relation,reason
+```
+
+Örnek dosyalar `backend/data/` klasöründedir. Web arayüzünde iki dosyayı seçtikten sonra analiz başlangıcı olacak düğüm kimliğini yazıp grafiği yükleyebilirsin.
+
+## API
+
+- `GET /api/health`: servis ve demo grafiği durumu
+- `POST /api/projects/import`: CSV metinlerinden geçici proje grafiği oluşturma
+- `POST /api/analyze`: seçilen düğümden dinamik etki analizi çalıştırma
+
+## Test
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+## Sonraki ürünleştirme adımları
+
+- Jira, GitLab ve test yönetim araçları için gerçek bağlayıcılar
+- Kalıcı veritabanı ve sürümlü proje grafikleri
+- Kullanıcı kimlik doğrulama ve rol tabanlı erişim
+- Müşteri verisiyle doğrulanan risk modeli
 - Kurum içi veya özel bulut kurulumu
 
 ## Güvenlik ve veri yaklaşımı

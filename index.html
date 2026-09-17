@@ -19,7 +19,7 @@
         <strong>AQUILA / Uçuş Kontrol Sistemi</strong>
       </div>
       <div class="topbar-actions">
-        <span class="demo-badge"><span></span> Sentetik demo verisi</span>
+        <span class="demo-badge" id="dataBadge"><span></span> Sentetik demo verisi</span>
         <button class="icon-button" id="exportButton" type="button" aria-label="Kanıt raporunu CSV olarak indir" title="Kanıt raporunu indir">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 17v3h14v-3"/></svg>
         </button>
@@ -43,9 +43,9 @@
       </nav>
 
       <div class="source-health">
-        <p>Kaynak sağlığı</p>
-        <div><span class="health-dot ok"></span><b>4/4</b> bağlı kaynak</div>
-        <small>Son eşitleme 09:42</small>
+        <p>MVP durumu</p>
+        <div><span class="health-dot ok"></span><b>API</b> çalışıyor</div>
+        <small>CSV grafiği yüklenebilir</small>
       </div>
     </aside>
 
@@ -59,6 +59,27 @@
           </div>
           <div class="analysis-state" id="analysisState"><span></span> Analize hazır</div>
         </div>
+
+        <article class="import-card">
+          <div class="import-copy">
+            <p class="eyebrow">Gerçek veri girişi</p>
+            <h2>İzlenebilirlik grafiğini CSV’den yükle</h2>
+            <p>Varlık ve ilişki dosyalarını içe aktar; ardından değişen düğüm kimliği üzerinden canlı etki analizi çalıştır.</p>
+          </div>
+          <div class="import-controls">
+            <label>Düğümler CSV
+              <input id="nodesFile" type="file" accept=".csv,text/csv" />
+            </label>
+            <label>İlişkiler CSV
+              <input id="edgesFile" type="file" accept=".csv,text/csv" />
+            </label>
+            <label>Değişen düğüm
+              <input id="changedNodeInput" type="text" value="SYS-REQ-142" spellcheck="false" />
+            </label>
+            <button class="secondary-button" id="importButton" type="button">Grafiği yükle</button>
+          </div>
+          <p class="import-status" id="importStatus" role="status">Aktif veri kümesi: sentetik demo grafiği</p>
+        </article>
 
         <div class="control-grid">
           <article class="change-card">
