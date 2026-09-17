@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="NexTrace AI açıklanabilir mühendislik değişiklik etki analizi prototipi." />
+  <title>NexTrace AI — Etki Analizi Prototipi</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="NexTrace ana ekran">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span>NexTrace <b>AI</b></span>
+      </a>
+      <div class="project-switcher">
+        <span class="project-kicker">Aktif program</span>
+        <strong>AQUILA / Uçuş Kontrol Sistemi</strong>
+      </div>
+      <div class="topbar-actions">
+        <span class="demo-badge"><span></span> Sentetik demo verisi</span>
+        <button class="icon-button" id="exportButton" type="button" aria-label="Kanıt raporunu CSV olarak indir" title="Kanıt raporunu indir">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 17v3h14v-3"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <aside class="sidebar" aria-label="Ana gezinme">
+      <nav>
+        <button class="nav-item active" type="button" data-view="analysis">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18V9m5 9V5m5 13v-7m5 7V3"/></svg>
+          <span>Etki analizi</span>
+        </button>
+        <button class="nav-item" type="button" data-view="architecture">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v5m0 0H6v5m6-5h6v5M6 13v5h12v-5M3 18h6m6 0h6"/></svg>
+          <span>Sistem mimarisi</span>
+        </button>
+        <button class="nav-item" type="button" data-view="evidence">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l3 3v15H6zM15 3v4h4M9 12h6m-6 4h6"/></svg>
+          <span>Kanıt günlüğü</span>
+        </button>
+      </nav>
+
+      <div class="source-health">
+        <p>Kaynak sağlığı</p>
+        <div><span class="health-dot ok"></span><b>4/4</b> bağlı kaynak</div>
+        <small>Son eşitleme 09:42</small>
+      </div>
+    </aside>
+
+    <main class="workspace">
+      <section class="view active" id="analysisView" data-view-panel="analysis">
+        <div class="page-heading">
+          <div>
+            <p class="eyebrow">Açıklanabilir karar desteği</p>
+            <h1>Değişiklik Etki Analizi</h1>
+            <p>Bir gereksinim değişmeden önce etkilenecek kodu, testi ve dokümanı iz yollarıyla görün.</p>
+          </div>
+          <div class="analysis-state" id="analysisState"><span></span> Analize hazır</div>
+        </div>
+
+        <div class="control-grid">
+          <article class="change-card">
+            <div class="card-heading">
+              <div>
+                <span class="mono-tag" id="scenarioId">CR-028</span>
+                <h2>Değişiklik talebi</h2>
+              </div>
+              <label class="scenario-picker">Senaryo
+                <select id="scenarioSelect" aria-label="Değişiklik senaryosu seç">
+                  <option value="latency">Telemetri gecikme eşiği</option>
+                  <option value="encryption">Şifreleme standardı</option>
+                  <option value="sampling">Sensör örnekleme sıklığı</option>
+                </select>
+              </label>
+            </div>
+            <div class="change-statement">
+              <span>Mevcut</span><strong id="currentValue">250 ms</strong>
+              <svg viewBox="0 0 32 20" aria-hidden="true"><path d="M2 10h25m0 0-6-6m6 6-6 6"/></svg>
+              <span>Önerilen</span><strong id="proposedValue">150 ms</strong>
+            </div>
+            <p class="change-description" id="scenarioDescription">SYS-REQ-142 telemetri paketlerinin en yüksek yük altında uçtan uca iletim eşiğini düşürür.</p>
+            <button class="primary-button" id="analyzeButton" type="button">
+              <span class="button-icon">⌁</span>
+              <span id="analyzeButtonLabel">Etkiyi analiz et</span>
+            </button>
+          </article>
+
+          <article class="summary-card" aria-live="polite">
+            <div class="card-heading">
+              <div>
+                <p class="eyebrow">Analiz özeti</p>
+                <h2 id="summaryTitle">Henüz çalıştırılmadı</h2>
+              </div>
+              <span class="confidence-ring" id="confidenceRing">—</span>
+            </div>
+            <div class="metric-row">
+              <div><strong id="impactCount">—</strong><span>Etkilenen varlık</span></div>
+              <div><strong id="criticalCount">—</strong><span>Kritik risk</span></div>
+              <div><strong id="pathCount">—</strong><span>Kanıt yolu</span></div>
+            </div>
+            <p class="summary-note" id="summaryNote">Analiz, izlenebilirlik grafiğindeki doğrulanmış ilişkileri ve sürüm bilgilerini kullanır.</p>
+          </article>
+        </div>
+
+        <article class="graph-card">
+          <div class="card-heading graph-heading">
+            <div>
+              <p class="eyebrow">Canlı izlenebilirlik grafiği</p>
+              <h2>Değişikliğin zincirleme etkisi</h2>
+            </div>
+            <div class="graph-legend" aria-label="Risk düzeyi açıklaması">
+              <span><i class="legend-dot critical"></i>Kritik</span>
+              <span><i class="legend-dot high"></i>Yüksek</span>
+              <span><i class="legend-dot medium"></i>Orta</span>
+            </div>
+          </div>
+          <div class="graph-stage" id="graphStage">
+            <svg id="traceGraph" viewBox="0 0 1000 410" role="img" aria-label="Değişiklikten etkilenen mühendislik varlıklarının ilişkisel grafiği"></svg>
+            <div class="graph-empty" id="graphEmpty">
+              <span class="radar"></span>
+              <strong>Analiz bekleniyor</strong>
+              <small>Değişiklik talebini çalıştırdığında kanıt yolları burada görünür.</small>
+            </div>
+          </div>
+        </article>
+
+        <article class="evidence-card">
+          <div class="card-heading">
+            <div>
+              <p class="eyebrow">Açıklanabilir sonuçlar</p>
+              <h2>Etki kanıtları</h2>
+            </div>
+            <div class="filter-group" role="group" aria-label="Risk filtresi">
+              <button class="filter active" type="button" data-filter="all">Tümü</button>
+              <button class="filter" type="button" data-filter="critical">Kritik</button>
+              <button class="filter" type="button" data-filter="high">Yüksek</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Varlık</th><th>Tür</th><th>Kanıt yolu</th><th>Risk</th><th>Durum</th></tr></thead>
+              <tbody id="evidenceTable">
+                <tr class="placeholder-row"><td colspan="5">Sonuçlar için etki analizini çalıştır.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <section class="view" id="architectureView" data-view-panel="architecture">
+        <div class="page-heading">
+          <div>
+            <p class="eyebrow">Teknik kanıt</p>
+            <h1>NexTrace Sistem Mimarisi</h1>
+            <p>Kaynak sistemlerden açıklanabilir etki kararına kadar izlenebilir, güvenli veri hattı.</p>
+          </div>
+          <span class="version-chip">Mimari v0.3</span>
+        </div>
+        <article class="architecture-card">
+          <img src="assets/nextrace-architecture.svg" alt="NexTrace veri kaynakları, bağlayıcı katmanı, izlenebilirlik grafiği ve etki analizi motoru mimarisi" />
+        </article>
+        <div class="architecture-notes">
+          <article><span>01</span><div><h3>Kaynakta değişiklik yok</h3><p>Jira, GitLab, TestRail ve doküman havuzları yalnızca bağlayıcılarla okunur.</p></div></article>
+          <article><span>02</span><div><h3>Açıklanabilir karar</h3><p>Her risk puanı, kaynak varlığa uzanan denetlenebilir ilişki yoluyla gösterilir.</p></div></article>
+          <article><span>03</span><div><h3>Kurumsal güvenlik</h3><p>Özel bulut/on-prem kurulum, rol tabanlı erişim ve değiştirilemez denetim kaydı desteklenir.</p></div></article>
+        </div>
+      </section>
+
+      <section class="view" id="evidenceView" data-view-panel="evidence">
+        <div class="page-heading">
+          <div>
+            <p class="eyebrow">Denetlenebilirlik</p>
+            <h1>Kanıt Günlüğü</h1>
+            <p>Her analiz girdisi, ilişki yolu ve kullanıcı kararı tek kayıt altında izlenir.</p>
+          </div>
+          <button class="secondary-button" id="exportButtonSecondary" type="button">CSV raporunu indir</button>
+        </div>
+        <article class="audit-card">
+          <div class="audit-topline"><span>Analiz kimliği</span><strong>NXT-2026-091</strong><span>Veri sürümü</span><strong>graph@2.4.1</strong><span>Durum</span><strong class="verified">Doğrulandı</strong></div>
+          <div id="auditTimeline" class="audit-timeline"></div>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <aside class="detail-drawer" id="detailDrawer" aria-hidden="true" aria-label="Varlık ayrıntıları">
+    <button class="drawer-close" id="drawerClose" type="button" aria-label="Ayrıntı panelini kapat">×</button>
+    <p class="eyebrow">Seçilen varlık</p>
+    <h2 id="drawerTitle">—</h2>
+    <span class="drawer-risk" id="drawerRisk">—</span>
+    <dl>
+      <div><dt>Tür</dt><dd id="drawerType">—</dd></div>
+      <div><dt>Sorumlu</dt><dd id="drawerOwner">—</dd></div>
+      <div><dt>Kanıt yolu</dt><dd id="drawerPath">—</dd></div>
+      <div><dt>Gerekçe</dt><dd id="drawerReason">—</dd></div>
+    </dl>
+    <button class="secondary-button full" id="markReviewed" type="button">İncelendi olarak işaretle</button>
+  </aside>
+  <div class="drawer-scrim" id="drawerScrim"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
