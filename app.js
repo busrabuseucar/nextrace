@@ -77,16 +77,21 @@ const graphStage = document.querySelector("#graphStage");
 const changedNodeInput = document.querySelector("#changedNodeInput");
 const importButton = document.querySelector("#importButton");
 const importStatus = document.querySelector("#importStatus");
+const projectSelect = document.querySelector("#projectSelect");
 const authGate = document.querySelector("#authGate");
 const authForm = document.querySelector("#authForm");
 const authMessage = document.querySelector("#authMessage");
 const logoutButton = document.querySelector("#logoutButton");
+const accessNav = document.querySelector("#accessNav");
+const importCard = document.querySelector("#importCard");
 let currentScenario = scenarios.latency;
 let currentFilter = "all";
 let analyzed = false;
 let currentProjectId = "demo";
 let currentAnalysisId = null;
 let setupRequired = false;
+let currentUser = null;
+let availableProjects = [];
 
 function showAuthGate(requiresSetup = false) {
   setupRequired = requiresSetup;
@@ -102,11 +107,17 @@ function showAuthGate(requiresSetup = false) {
 }
 
 function hideAuthGate(user) {
+  currentUser = user;
   authGate.hidden = true;
   authMessage.textContent = "";
   authForm.reset();
   logoutButton.hidden = false;
   logoutButton.textContent = `${user.email} · Çıkış`;
+  const isAdmin = user.role === "admin";
+  accessNav.hidden = !isAdmin;
+  importCard.hidden = !isAdmin;
+  loadAvailableProjects();
+  if (isAdmin) loadAccessData();
 }
 
 async function initializeAuth() {
@@ -127,6 +138,78 @@ async function apiFetch(url, options = {}) {
   const response = await fetch(url, options);
   if (response.status === 401) showAuthGate(false);
   return response;
+}
+
+function applySelectedProjectAccess() {
+  const project = availableProjects.find(item => item.id === currentProjectId);
+  const canAnalyze = currentUser?.role === "admin" || project?.access_level === "analyst";
+  analyzeButton.disabled = !canAnalyze;
+  analyzeButtonLabel.textContent = canAnalyze ? "Etkiyi analiz et" : "Yalnızca görüntüleme yetkisi";
+  if (!project) {
+    analysisState.className = "analysis-state error";
+    analysisState.innerHTML = "<span></span> Atanmış proje bulunamadı";
+  }
+}
+
+async function loadAvailableProjects(preferredProjectId = null) {
+  try {
+    const response = await apiFetch("/api/projects", { cache: "no-store" });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Projeler alınamadı.");
+    availableProjects = result.projects;
+    projectSelect.innerHTML = availableProjects.length
+      ? availableProjects.map(project => `<option value="${escapeHtml(project.id)}">${escapeHtml(project.name)}</option>`).join("")
+      : '<option value="">Atanmış proje yok</option>';
+    const requested = preferredProjectId || currentProjectId;
+    const selected = availableProjects.find(project => project.id === requested) || availableProjects[0];
+    currentProjectId = selected?.id || "";
+    projectSelect.value = currentProjectId;
+    if (currentProjectId === "demo") changedNodeInput.value = currentScenario.sourceNode;
+    resetAnalysis();
+    applySelectedProjectAccess();
+  } catch (error) {
+    analysisState.className = "analysis-state error";
+    analysisState.innerHTML = "<span></span>";
+    analysisState.append(document.createTextNode(` ${error.message}`));
+  }
+}
+
+async function loadAccessData() {
+  if (currentUser?.role !== "admin") return;
+  const userStatus = document.querySelector("#createUserStatus");
+  try {
+    const [usersResponse, projectsResponse, membershipsResponse] = await Promise.all([
+      apiFetch("/api/users", { cache: "no-store" }),
+      apiFetch("/api/projects", { cache: "no-store" }),
+      apiFetch("/api/projects/access", { cache: "no-store" })
+    ]);
+    const [usersResult, projectsResult, membershipsResult] = await Promise.all([
+      usersResponse.json(), projectsResponse.json(), membershipsResponse.json()
+    ]);
+    if (!usersResponse.ok) throw new Error(usersResult.error || "Kullanıcılar alınamadı.");
+    if (!projectsResponse.ok) throw new Error(projectsResult.error || "Projeler alınamadı.");
+    if (!membershipsResponse.ok) throw new Error(membershipsResult.error || "Erişimler alınamadı.");
+
+    const users = usersResult.users;
+    const projects = projectsResult.projects;
+    const memberships = membershipsResult.memberships;
+    document.querySelector("#usersTable").innerHTML = users.map(user => `
+      <tr><td>${escapeHtml(user.email)}</td><td>${user.role === "admin" ? "Yönetici" : "Analist"}</td><td>${new Date(user.created_at).toLocaleDateString("tr-TR")}</td></tr>
+    `).join("");
+    document.querySelector("#membershipsTable").innerHTML = memberships.length
+      ? memberships.map(item => `
+        <tr><td>${escapeHtml(item.email)}</td><td>${escapeHtml(item.project_name)}</td><td>${item.access_level === "analyst" ? "Analiz" : "Görüntüleme"}</td></tr>
+      `).join("")
+      : '<tr class="placeholder-row"><td colspan="3">Henüz proje ataması yok.</td></tr>';
+    document.querySelector("#accessUser").innerHTML = users
+      .filter(user => user.role === "analyst")
+      .map(user => `<option value="${escapeHtml(user.id)}">${escapeHtml(user.email)}</option>`).join("");
+    document.querySelector("#accessProject").innerHTML = projects
+      .map(project => `<option value="${escapeHtml(project.id)}">${escapeHtml(project.name)}</option>`).join("");
+  } catch (error) {
+    userStatus.className = "admin-status error";
+    userStatus.textContent = error.message;
+  }
 }
 
 function updateScenarioText() {
@@ -325,7 +408,7 @@ async function importGraph() {
     document.querySelector("#dataBadge").lastChild.textContent = " Yüklenen CSV verisi";
     importStatus.className = "import-status success";
     importStatus.textContent = `Aktif veri kümesi: ${result.node_count} düğüm, ${result.edge_count} ilişki`;
-    resetAnalysis();
+    await loadAvailableProjects(result.project_id);
   } catch (error) {
     importStatus.className = "import-status error";
     importStatus.textContent = error.message;
@@ -391,6 +474,7 @@ document.querySelectorAll(".nav-item").forEach(button => {
   button.addEventListener("click", () => {
     document.querySelectorAll(".nav-item").forEach(item => item.classList.toggle("active", item === button));
     document.querySelectorAll(".view").forEach(view => view.classList.toggle("active", view.dataset.viewPanel === button.dataset.view));
+    if (button.dataset.view === "access") loadAccessData();
   });
 });
 
@@ -403,8 +487,63 @@ document.querySelectorAll(".filter").forEach(button => {
 });
 
 scenarioSelect.addEventListener("change", updateScenarioText);
+projectSelect.addEventListener("change", () => {
+  currentProjectId = projectSelect.value;
+  if (currentProjectId === "demo") changedNodeInput.value = currentScenario.sourceNode;
+  resetAnalysis();
+  applySelectedProjectAccess();
+});
 analyzeButton.addEventListener("click", runAnalysis);
 importButton.addEventListener("click", importGraph);
+document.querySelector("#createUserForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  const status = document.querySelector("#createUserStatus");
+  status.className = "admin-status";
+  status.textContent = "Kullanıcı oluşturuluyor…";
+  try {
+    const response = await apiFetch("/api/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: document.querySelector("#newUserEmail").value,
+        password: document.querySelector("#newUserPassword").value,
+        role: document.querySelector("#newUserRole").value
+      })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Kullanıcı oluşturulamadı.");
+    status.textContent = `${result.user.email} hesabı oluşturuldu.`;
+    event.target.reset();
+    await loadAccessData();
+  } catch (error) {
+    status.className = "admin-status error";
+    status.textContent = error.message;
+  }
+});
+document.querySelector("#assignAccessForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  const status = document.querySelector("#assignAccessStatus");
+  status.className = "admin-status";
+  status.textContent = "Erişim kaydediliyor…";
+  try {
+    const response = await apiFetch("/api/projects/access", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id: document.querySelector("#accessUser").value,
+        project_id: document.querySelector("#accessProject").value,
+        access_level: document.querySelector("#accessLevel").value
+      })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Erişim kaydedilemedi.");
+    status.textContent = result.message;
+    await loadAccessData();
+  } catch (error) {
+    status.className = "admin-status error";
+    status.textContent = error.message;
+  }
+});
 authForm.addEventListener("submit", async event => {
   event.preventDefault();
   authMessage.textContent = "";
@@ -436,6 +575,7 @@ logoutButton.addEventListener("click", async () => {
     headers: { "Content-Type": "application/json" },
     body: "{}"
   });
+  currentUser = null;
   showAuthGate(false);
 });
 document.querySelector("#drawerClose").addEventListener("click", closeDrawer);

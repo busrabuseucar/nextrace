@@ -97,6 +97,29 @@ class NexTraceHandler(SimpleHTTPRequestHandler):
             self._json({"error": "Oturum açılması gerekiyor."}, HTTPStatus.UNAUTHORIZED)
         return user
 
+    def _require_admin(self, user: dict) -> bool:
+        if user["role"] == "admin":
+            return True
+        self._json({"error": "Bu işlem yönetici yetkisi gerektiriyor."}, HTTPStatus.FORBIDDEN)
+        return False
+
+    def _require_project_access(
+        self, user: dict, project_id: str, analysis_required: bool = False
+    ) -> bool:
+        if user["role"] == "admin":
+            return True
+        access = STORE.get_project_access(project_id, user["id"])
+        if not access:
+            self._json({"error": "Bu projeye erişim yetkin yok."}, HTTPStatus.FORBIDDEN)
+            return False
+        if analysis_required and access != "analyst":
+            self._json(
+                {"error": "Bu projede analiz çalıştırma yetkin yok."},
+                HTTPStatus.FORBIDDEN,
+            )
+            return False
+        return True
+
     def _session_cookie_header(self, token: str, max_age: int = 12 * 60 * 60) -> str:
         secure = "; Secure" if os.environ.get("NEXTRACE_SECURE_COOKIES") == "1" else ""
         return (
@@ -180,12 +203,15 @@ class NexTraceHandler(SimpleHTTPRequestHandler):
             )
             return
         if path == "/api/projects":
-            if not self._require_auth():
+            user = self._require_auth()
+            if not user:
                 return
-            self._json({"projects": STORE.list_projects()})
+            projects = STORE.list_projects(None if user["role"] == "admin" else user["id"])
+            self._json({"projects": projects})
             return
         if path == "/api/analyses":
-            if not self._require_auth():
+            user = self._require_auth()
+            if not user:
                 return
             query = parse_qs(parsed.query)
             project_id = query.get("project_id", ["demo"])[0].strip()
@@ -197,7 +223,21 @@ class NexTraceHandler(SimpleHTTPRequestHandler):
             if not STORE.has_project(project_id):
                 self._json({"error": f"Proje bulunamadı: {project_id}"}, HTTPStatus.NOT_FOUND)
                 return
+            if not self._require_project_access(user, project_id):
+                return
             self._json({"analyses": STORE.list_analyses(project_id, limit)})
+            return
+        if path == "/api/users":
+            user = self._require_auth()
+            if not user or not self._require_admin(user):
+                return
+            self._json({"users": STORE.list_users()})
+            return
+        if path == "/api/projects/access":
+            user = self._require_auth()
+            if not user or not self._require_admin(user):
+                return
+            self._json({"memberships": STORE.list_project_access()})
             return
         if not self._public_file_allowed(path):
             self._json({"error": "Kaynak bulunamadı."}, HTTPStatus.NOT_FOUND)
@@ -232,13 +272,26 @@ class NexTraceHandler(SimpleHTTPRequestHandler):
                     extra_headers={"Set-Cookie": self._session_cookie_header("", 0)},
                 )
                 return
-            if not self._require_auth():
+            user = self._require_auth()
+            if not user:
                 return
             if path == "/api/analyze":
-                self._handle_analyze(payload)
+                self._handle_analyze(payload, user)
                 return
             if path == "/api/projects/import":
+                if not self._require_admin(user):
+                    return
                 self._handle_import(payload)
+                return
+            if path == "/api/users":
+                if not self._require_admin(user):
+                    return
+                self._handle_create_user(payload)
+                return
+            if path == "/api/projects/access":
+                if not self._require_admin(user):
+                    return
+                self._handle_project_access(payload)
                 return
             self._json({"error": "Uç nokta bulunamadı."}, HTTPStatus.NOT_FOUND)
         except KeyError as exc:
@@ -281,11 +334,35 @@ class NexTraceHandler(SimpleHTTPRequestHandler):
             extra_headers={"Set-Cookie": self._session_cookie_header(token)},
         )
 
-    def _handle_analyze(self, payload: dict) -> None:
+    def _handle_create_user(self, payload: dict) -> None:
+        try:
+            user = AUTH.create_user(
+                str(payload.get("email", "")),
+                str(payload.get("password", "")),
+                str(payload.get("role", "analyst")),
+            )
+        except AuthenticationError as exc:
+            self._json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+        self._json({"user": user}, HTTPStatus.CREATED)
+
+    def _handle_project_access(self, payload: dict) -> None:
+        STORE.set_project_access(
+            str(payload.get("project_id", "")).strip(),
+            str(payload.get("user_id", "")).strip(),
+            str(payload.get("access_level", "viewer")).strip(),
+        )
+        self._json({"message": "Proje erişimi güncellendi."})
+
+    def _handle_analyze(self, payload: dict, user: dict) -> None:
         project_id = str(payload.get("project_id", "demo")).strip()
         changed_node_id = str(payload.get("changed_node_id", "")).strip()
         if not changed_node_id:
             raise ValueError("changed_node_id zorunludur.")
+        if not STORE.has_project(project_id):
+            raise KeyError(f"Proje bulunamadı: {project_id}")
+        if not self._require_project_access(user, project_id, analysis_required=True):
+            return
         graph = STORE.load_graph(project_id)
         result = graph.analyze(
             changed_node_id=changed_node_id,

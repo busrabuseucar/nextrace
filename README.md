@@ -6,7 +6,7 @@ NexTrace AI, kritik mühendislik projelerinde bir değişikliğin gereksinim, ko
 
 ## Mevcut sürüm — çalışan MVP temeli
 
-Bu depo, ürün fikrini ve temel kullanıcı akışını doğrulayan **dinamik etki analizi motoru ile çalışan MVP temelini** içerir. Arayüz artık hazır sonuçları taklit etmez; Python API, yüklenen izlenebilirlik grafiğini tarayarak etkilenen varlıkları, kanıt yollarını ve risk puanlarını hesaplar. Projeler ve analiz geçmişi SQLite veritabanında kalıcı olarak tutulur. Henüz gerçek kurum sistemlerine doğrudan bağlanan üretim sürümü veya doğrulanmış müşteri pilotu değildir.
+Bu depo, ürün fikrini ve temel kullanıcı akışını doğrulayan **dinamik etki analizi motoru ile çalışan MVP temelini** içerir. Arayüz artık hazır sonuçları taklit etmez; Python API, yüklenen izlenebilirlik grafiğini tarayarak etkilenen varlıkları, kanıt yollarını ve risk puanlarını hesaplar. Projeler ve analiz geçmişi SQLite veritabanında kalıcı olarak tutulur. Yönetici ve analist rolleri proje bazlı erişimle ayrılır. Henüz gerçek kurum sistemlerine doğrudan bağlanan üretim sürümü veya doğrulanmış müşteri pilotu değildir.
 
 Demoda üç örnek değişiklik senaryosu bulunur:
 
@@ -85,9 +85,13 @@ source,target,relation,reason
 - `GET /api/auth/status`: ilk kurulum ve oturum durumu
 - `GET /api/projects`: kalıcı proje listesi ve grafik büyüklükleri
 - `GET /api/analyses?project_id=demo`: kayıtlı analiz geçmişi
+- `GET /api/users`: yönetici için kullanıcı listesi
+- `GET /api/projects/access`: yönetici için proje üyelikleri
 - `POST /api/auth/setup`: yalnızca ilk yönetici hesabını oluşturma
 - `POST /api/auth/login`: güvenli oturum açma
 - `POST /api/auth/logout`: oturumu sonlandırma
+- `POST /api/users`: yönetici tarafından kullanıcı oluşturma
+- `POST /api/projects/access`: kullanıcıya proje yetkisi atama
 - `POST /api/projects/import`: CSV metinlerinden kalıcı proje grafiği oluşturma
 - `POST /api/analyze`: seçilen düğümden dinamik etki analizi çalıştırma
 
@@ -101,7 +105,7 @@ python -m unittest discover -s tests -v
 
 - Jira, GitLab ve test yönetim araçları için gerçek bağlayıcılar
 - Proje grafiği sürümleme ve değişiklik karşılaştırma
-- Çok kullanıcılı rol ve proje bazlı yetkilendirme
+- Parola değiştirme, sıfırlama ve hesap devre dışı bırakma
 - Müşteri verisiyle doğrulanan risk modeli
 - Kurum içi veya özel bulut kurulumu
 
@@ -114,6 +118,8 @@ Hedef ürün, müşteri verilerini müşteri ortamında tutacak şekilde kurum i
 - Oturum çerezi `HttpOnly` ve `SameSite=Strict` özelliklerini kullanır.
 - Giriş denemeleri IP başına sınırlandırılır.
 - Proje ve analiz API'leri kimlik doğrulama olmadan kullanılamaz.
+- Analistler yalnızca atandıkları projeleri görebilir; `viewer` analiz çalıştıramaz.
+- Kullanıcı oluşturma, proje içe aktarma ve yetki atama yalnızca yöneticiye açıktır.
 
 HTTPS arkasındaki üretim kurulumunda güvenli çerez zorunluluğunu etkinleştir:
 

@@ -69,6 +69,21 @@ class AuthService:
         )
         return self._create_session(user)
 
+    def create_user(self, email: str, password: str, role: str = "analyst") -> dict:
+        normalized_email = self._validate_email(email)
+        self._validate_new_password(password)
+        if role not in {"admin", "analyst"}:
+            raise AuthenticationError("Geçersiz kullanıcı rolü.")
+        salt = secrets.token_bytes(16)
+        password_hash = self._hash_password(password, salt, PASSWORD_ITERATIONS)
+        return self.store.create_user(
+            normalized_email,
+            password_hash,
+            salt,
+            PASSWORD_ITERATIONS,
+            role,
+        )
+
     def login(self, email: str, password: str) -> tuple[str, dict, str]:
         normalized_email = self._validate_email(email)
         user = self.store.get_user_by_email(normalized_email)

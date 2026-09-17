@@ -16,7 +16,7 @@
       </a>
       <div class="project-switcher">
         <span class="project-kicker">Aktif program</span>
-        <strong>AQUILA / Uçuş Kontrol Sistemi</strong>
+        <select id="projectSelect" aria-label="Aktif projeyi seç"><option value="demo">AQUILA / Uçuş Kontrol Sistemi</option></select>
       </div>
       <div class="topbar-actions">
         <span class="demo-badge" id="dataBadge"><span></span> Sentetik demo verisi</span>
@@ -41,6 +41,10 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l3 3v15H6zM15 3v4h4M9 12h6m-6 4h6"/></svg>
           <span>Kanıt günlüğü</span>
         </button>
+        <button class="nav-item" id="accessNav" type="button" data-view="access" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm7-2h5m-2.5-2.5v5M3 21v-2a6 6 0 0 1 12 0v2"/></svg>
+          <span>Ekip ve erişim</span>
+        </button>
       </nav>
 
       <div class="source-health">
@@ -61,7 +65,7 @@
           <div class="analysis-state" id="analysisState"><span></span> Analize hazır</div>
         </div>
 
-        <article class="import-card">
+        <article class="import-card" id="importCard">
           <div class="import-copy">
             <p class="eyebrow">Gerçek veri girişi</p>
             <h2>İzlenebilirlik grafiğini CSV’den yükle</h2>
@@ -73,9 +77,6 @@
             </label>
             <label>İlişkiler CSV
               <input id="edgesFile" type="file" accept=".csv,text/csv" />
-            </label>
-            <label>Değişen düğüm
-              <input id="changedNodeInput" type="text" value="SYS-REQ-142" spellcheck="false" />
             </label>
             <button class="secondary-button" id="importButton" type="button">Grafiği yükle</button>
           </div>
@@ -103,6 +104,9 @@
               <span>Önerilen</span><strong id="proposedValue">150 ms</strong>
             </div>
             <p class="change-description" id="scenarioDescription">SYS-REQ-142 telemetri paketlerinin en yüksek yük altında uçtan uca iletim eşiğini düşürür.</p>
+            <label class="node-picker">Değişen düğüm kimliği
+              <input id="changedNodeInput" type="text" value="SYS-REQ-142" spellcheck="false" />
+            </label>
             <button class="primary-button" id="analyzeButton" type="button">
               <span class="button-icon">⌁</span>
               <span id="analyzeButtonLabel">Etkiyi analiz et</span>
@@ -203,6 +207,58 @@
           <div class="audit-topline"><span>Depolama</span><strong>SQLite</strong><span>Veri sürümü</span><strong>graph@2.4.1</strong><span>Durum</span><strong class="verified">Kalıcı kayıt açık</strong></div>
           <div id="auditTimeline" class="audit-timeline"></div>
         </article>
+      </section>
+
+      <section class="view" id="accessView" data-view-panel="access">
+        <div class="page-heading">
+          <div>
+            <p class="eyebrow">Yönetici alanı</p>
+            <h1>Ekip ve Proje Erişimi</h1>
+            <p>Kullanıcı hesaplarını oluştur, yalnızca ihtiyaç duydukları projelere ve işlemlere yetki ver.</p>
+          </div>
+          <span class="version-chip">RBAC etkin</span>
+        </div>
+
+        <div class="access-grid">
+          <article class="admin-card">
+            <p class="eyebrow">Yeni kullanıcı</p>
+            <h2>Hesap oluştur</h2>
+            <form class="admin-form" id="createUserForm">
+              <label>E-posta<input id="newUserEmail" type="email" required /></label>
+              <label>Geçici parola<input id="newUserPassword" type="password" minlength="12" maxlength="128" required /></label>
+              <label>Rol
+                <select id="newUserRole"><option value="analyst">Analist</option><option value="admin">Yönetici</option></select>
+              </label>
+              <button class="primary-button" type="submit">Kullanıcı oluştur</button>
+            </form>
+            <p class="admin-status" id="createUserStatus" role="status"></p>
+          </article>
+
+          <article class="admin-card">
+            <p class="eyebrow">En az yetki ilkesi</p>
+            <h2>Projeye ata</h2>
+            <form class="admin-form" id="assignAccessForm">
+              <label>Kullanıcı<select id="accessUser" required></select></label>
+              <label>Proje<select id="accessProject" required></select></label>
+              <label>Erişim
+                <select id="accessLevel"><option value="viewer">Sadece görüntüle</option><option value="analyst">Analiz çalıştır</option></select>
+              </label>
+              <button class="primary-button" type="submit">Erişimi kaydet</button>
+            </form>
+            <p class="admin-status" id="assignAccessStatus" role="status"></p>
+          </article>
+        </div>
+
+        <div class="access-grid access-lists">
+          <article class="admin-card">
+            <div class="card-heading"><div><p class="eyebrow">Hesaplar</p><h2>Kullanıcılar</h2></div></div>
+            <div class="table-wrap"><table><thead><tr><th>E-posta</th><th>Rol</th><th>Oluşturulma</th></tr></thead><tbody id="usersTable"></tbody></table></div>
+          </article>
+          <article class="admin-card">
+            <div class="card-heading"><div><p class="eyebrow">Atamalar</p><h2>Proje üyelikleri</h2></div></div>
+            <div class="table-wrap"><table><thead><tr><th>Kullanıcı</th><th>Proje</th><th>Erişim</th></tr></thead><tbody id="membershipsTable"></tbody></table></div>
+          </article>
+        </div>
       </section>
     </main>
   </div>

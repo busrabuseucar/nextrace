@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "backend"))
 
 from auth import AuthenticationError, AuthService  # noqa: E402
+from engine import TraceGraph  # noqa: E402
 from storage import ProjectStore  # noqa: E402
 
 
@@ -46,6 +47,23 @@ class AuthServiceTests(unittest.TestCase):
         self.auth.setup("admin@nextrace.local", "GuvenliParola2026")
         with self.assertRaises(AuthenticationError):
             self.auth.login("admin@nextrace.local", "YanlisParola2026")
+
+    def test_analyst_only_sees_assigned_projects(self):
+        _, admin, _ = self.auth.setup("admin@nextrace.local", "GuvenliParola2026")
+        analyst = self.auth.create_user(
+            "analyst@nextrace.local", "AnalistParola2026", "analyst"
+        )
+        data = ROOT / "backend" / "data"
+        graph = TraceGraph.from_csv_files(data / "nodes.csv", data / "edges.csv")
+        self.store.save_project("demo", "Demo", graph)
+        self.assertEqual(self.store.list_projects(analyst["id"]), [])
+        self.store.set_project_access("demo", analyst["id"], "viewer")
+        projects = self.store.list_projects(analyst["id"])
+        self.assertEqual(projects[0]["id"], "demo")
+        self.assertEqual(projects[0]["access_level"], "viewer")
+        self.assertEqual(self.store.get_project_access("demo", analyst["id"]), "viewer")
+        with self.assertRaises(ValueError):
+            self.store.set_project_access("demo", admin["id"], "analyst")
 
 
 if __name__ == "__main__":
