@@ -20,6 +20,7 @@
       </div>
       <div class="topbar-actions">
         <span class="demo-badge" id="dataBadge"><span></span> Sentetik demo verisi</span>
+        <button class="auth-user-button" id="passwordButton" type="button" hidden>Parolam</button>
         <button class="auth-user-button" id="logoutButton" type="button" hidden>Çıkış</button>
         <button class="icon-button" id="exportButton" type="button" aria-label="Kanıt raporunu CSV olarak indir" title="Kanıt raporunu indir">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 17v3h14v-3"/></svg>
@@ -247,12 +248,29 @@
             </form>
             <p class="admin-status" id="assignAccessStatus" role="status"></p>
           </article>
+
+          <article class="admin-card account-card">
+            <p class="eyebrow">Hesap yaşam döngüsü</p>
+            <h2>Kullanıcıyı yönet</h2>
+            <label class="account-user-label">Kullanıcı<select id="accountUser" required></select></label>
+            <form class="admin-form compact-admin-form" id="resetPasswordForm">
+              <label>Yeni geçici parola<input id="temporaryPassword" type="password" minlength="12" maxlength="128" required /></label>
+              <button class="secondary-button" type="submit">Parolayı sıfırla</button>
+            </form>
+            <form class="admin-form compact-admin-form" id="accountStatusForm">
+              <label>Hesap durumu
+                <select id="accountActive"><option value="true">Aktif</option><option value="false">Devre dışı</option></select>
+              </label>
+              <button class="secondary-button" type="submit">Durumu kaydet</button>
+            </form>
+            <p class="admin-status" id="accountStatus" role="status"></p>
+          </article>
         </div>
 
         <div class="access-grid access-lists">
           <article class="admin-card">
             <div class="card-heading"><div><p class="eyebrow">Hesaplar</p><h2>Kullanıcılar</h2></div></div>
-            <div class="table-wrap"><table><thead><tr><th>E-posta</th><th>Rol</th><th>Oluşturulma</th></tr></thead><tbody id="usersTable"></tbody></table></div>
+            <div class="table-wrap"><table><thead><tr><th>E-posta</th><th>Rol</th><th>Durum</th><th>Parola</th><th>Oluşturulma</th></tr></thead><tbody id="usersTable"></tbody></table></div>
           </article>
           <article class="admin-card">
             <div class="card-heading"><div><p class="eyebrow">Atamalar</p><h2>Proje üyelikleri</h2></div></div>
@@ -294,6 +312,31 @@
         <button class="primary-button" id="authSubmit" type="submit">Giriş yap</button>
       </form>
       <p class="auth-message" id="authMessage" role="alert"></p>
+    </div>
+  </section>
+
+  <section class="auth-gate password-gate" id="passwordGate" aria-label="Parola değiştirme ekranı" hidden>
+    <div class="auth-card">
+      <span class="brand-mark auth-brand" aria-hidden="true"><i></i><i></i><i></i></span>
+      <p class="eyebrow">Hesap güvenliği</p>
+      <h1 id="passwordTitle">Parolanı değiştir</h1>
+      <p id="passwordHint">Yeni parolan en az 12 karakter, bir harf ve bir rakam içermelidir.</p>
+      <form id="passwordForm">
+        <label>Mevcut parola
+          <input id="currentPassword" type="password" autocomplete="current-password" maxlength="128" required />
+        </label>
+        <label>Yeni parola
+          <input id="newPassword" type="password" autocomplete="new-password" minlength="12" maxlength="128" required />
+        </label>
+        <label>Yeni parola tekrar
+          <input id="newPasswordConfirm" type="password" autocomplete="new-password" minlength="12" maxlength="128" required />
+        </label>
+        <div class="auth-actions">
+          <button class="secondary-button" id="passwordCancel" type="button">Vazgeç</button>
+          <button class="primary-button" id="passwordSubmit" type="submit">Parolayı güncelle</button>
+        </div>
+      </form>
+      <p class="auth-message" id="passwordMessage" role="alert"></p>
     </div>
   </section>
 

@@ -84,6 +84,16 @@ class AuthService:
             role,
         )
 
+    @staticmethod
+    def _public_user(user: dict) -> dict:
+        return {
+            "id": user["id"],
+            "email": user["email"],
+            "role": user["role"],
+            "active": bool(user["active"]),
+            "must_change_password": bool(user["must_change_password"]),
+        }
+
     def login(self, email: str, password: str) -> tuple[str, dict, str]:
         normalized_email = self._validate_email(email)
         user = self.store.get_user_by_email(normalized_email)
@@ -95,10 +105,57 @@ class AuthService:
         else:
             expected = bytes(32)
             actual = self._hash_password(password, bytes(16), PASSWORD_ITERATIONS)
-        if not user or not hmac.compare_digest(actual, expected):
+        if (
+            not user
+            or not hmac.compare_digest(actual, expected)
+            or not user["active"]
+        ):
             raise AuthenticationError("E-posta veya parola hatalı.")
-        public_user = {"id": user["id"], "email": user["email"], "role": user["role"]}
-        return self._create_session(public_user)
+        return self._create_session(self._public_user(user))
+
+    def change_password(
+        self, user_id: str, current_password: str, new_password: str
+    ) -> tuple[str, dict, str]:
+        self._validate_new_password(new_password)
+        user = self.store.get_user_by_id(user_id)
+        if not user or not user["active"]:
+            raise AuthenticationError("Oturum açılması gerekiyor.")
+        current_hash = self._hash_password(
+            current_password, user["password_salt"], user["password_iterations"]
+        )
+        if not hmac.compare_digest(current_hash, user["password_hash"]):
+            raise AuthenticationError("Mevcut parola hatalı.")
+        new_hash = self._hash_password(
+            new_password, user["password_salt"], user["password_iterations"]
+        )
+        if hmac.compare_digest(new_hash, user["password_hash"]):
+            raise AuthenticationError("Yeni parola mevcut paroladan farklı olmalıdır.")
+        salt = secrets.token_bytes(16)
+        password_hash = self._hash_password(new_password, salt, PASSWORD_ITERATIONS)
+        updated = self.store.update_user_password(
+            user_id,
+            password_hash,
+            salt,
+            PASSWORD_ITERATIONS,
+            must_change_password=False,
+        )
+        return self._create_session(self._public_user(updated))
+
+    def admin_reset_password(self, user_id: str, new_password: str) -> dict:
+        self._validate_new_password(new_password)
+        salt = secrets.token_bytes(16)
+        password_hash = self._hash_password(new_password, salt, PASSWORD_ITERATIONS)
+        updated = self.store.update_user_password(
+            user_id,
+            password_hash,
+            salt,
+            PASSWORD_ITERATIONS,
+            must_change_password=True,
+        )
+        return self._public_user(updated)
+
+    def set_user_active(self, user_id: str, active: bool) -> dict:
+        return self._public_user(self.store.set_user_active(user_id, active))
 
     def _create_session(self, user: dict) -> tuple[str, dict, str]:
         token = secrets.token_urlsafe(32)

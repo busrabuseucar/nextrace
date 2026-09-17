@@ -82,6 +82,11 @@ const authGate = document.querySelector("#authGate");
 const authForm = document.querySelector("#authForm");
 const authMessage = document.querySelector("#authMessage");
 const logoutButton = document.querySelector("#logoutButton");
+const passwordButton = document.querySelector("#passwordButton");
+const passwordGate = document.querySelector("#passwordGate");
+const passwordForm = document.querySelector("#passwordForm");
+const passwordMessage = document.querySelector("#passwordMessage");
+const passwordCancel = document.querySelector("#passwordCancel");
 const accessNav = document.querySelector("#accessNav");
 const importCard = document.querySelector("#importCard");
 let currentScenario = scenarios.latency;
@@ -92,6 +97,7 @@ let currentAnalysisId = null;
 let setupRequired = false;
 let currentUser = null;
 let availableProjects = [];
+let passwordChangeForced = false;
 
 function showAuthGate(requiresSetup = false) {
   setupRequired = requiresSetup;
@@ -104,6 +110,8 @@ function showAuthGate(requiresSetup = false) {
   document.querySelector("#authSubmit").textContent = requiresSetup ? "Yönetici hesabını oluştur" : "Giriş yap";
   document.querySelector("#authPassword").autocomplete = requiresSetup ? "new-password" : "current-password";
   logoutButton.hidden = true;
+  passwordButton.hidden = true;
+  passwordGate.hidden = true;
 }
 
 function hideAuthGate(user) {
@@ -113,11 +121,42 @@ function hideAuthGate(user) {
   authForm.reset();
   logoutButton.hidden = false;
   logoutButton.textContent = `${user.email} · Çıkış`;
+  if (user.must_change_password) {
+    passwordButton.hidden = true;
+    accessNav.hidden = true;
+    importCard.hidden = true;
+    showPasswordGate(true);
+    return;
+  }
+  passwordButton.hidden = false;
+  passwordGate.hidden = true;
   const isAdmin = user.role === "admin";
   accessNav.hidden = !isAdmin;
   importCard.hidden = !isAdmin;
   loadAvailableProjects();
   if (isAdmin) loadAccessData();
+}
+
+function showPasswordGate(forced = false) {
+  passwordChangeForced = forced;
+  passwordGate.hidden = false;
+  passwordForm.reset();
+  passwordMessage.textContent = "";
+  passwordCancel.hidden = forced;
+  document.querySelector("#passwordTitle").textContent = forced
+    ? "Geçici parolanı değiştir"
+    : "Parolanı değiştir";
+  document.querySelector("#passwordHint").textContent = forced
+    ? "Projeye erişmeden önce yönetici tarafından verilen geçici parolanı yenilemelisin."
+    : "Yeni parolan en az 12 karakter, bir harf ve bir rakam içermelidir.";
+  document.querySelector("#currentPassword").focus();
+}
+
+function hidePasswordGate() {
+  if (passwordChangeForced) return;
+  passwordGate.hidden = true;
+  passwordMessage.textContent = "";
+  passwordForm.reset();
 }
 
 async function initializeAuth() {
@@ -136,7 +175,13 @@ async function initializeAuth() {
 
 async function apiFetch(url, options = {}) {
   const response = await fetch(url, options);
-  if (response.status === 401) showAuthGate(false);
+  if (response.status === 401) {
+    currentUser = null;
+    showAuthGate(false);
+  } else if (response.status === 403) {
+    const detail = await response.clone().json().catch(() => ({}));
+    if (detail.code === "PASSWORD_CHANGE_REQUIRED") showPasswordGate(true);
+  }
   return response;
 }
 
@@ -194,7 +239,13 @@ async function loadAccessData() {
     const projects = projectsResult.projects;
     const memberships = membershipsResult.memberships;
     document.querySelector("#usersTable").innerHTML = users.map(user => `
-      <tr><td>${escapeHtml(user.email)}</td><td>${user.role === "admin" ? "Yönetici" : "Analist"}</td><td>${new Date(user.created_at).toLocaleDateString("tr-TR")}</td></tr>
+      <tr>
+        <td>${escapeHtml(user.email)}</td>
+        <td>${user.role === "admin" ? "Yönetici" : "Analist"}</td>
+        <td><span class="account-state ${user.active ? "active" : "inactive"}">${user.active ? "Aktif" : "Kapalı"}</span></td>
+        <td><span class="password-state ${user.must_change_password ? "required" : "ready"}">${user.must_change_password ? "Değişmeli" : "Güncel"}</span></td>
+        <td>${new Date(user.created_at).toLocaleDateString("tr-TR")}</td>
+      </tr>
     `).join("");
     document.querySelector("#membershipsTable").innerHTML = memberships.length
       ? memberships.map(item => `
@@ -206,10 +257,25 @@ async function loadAccessData() {
       .map(user => `<option value="${escapeHtml(user.id)}">${escapeHtml(user.email)}</option>`).join("");
     document.querySelector("#accessProject").innerHTML = projects
       .map(project => `<option value="${escapeHtml(project.id)}">${escapeHtml(project.name)}</option>`).join("");
+    const manageableUsers = users.filter(user => user.id !== currentUser.id);
+    const accountUser = document.querySelector("#accountUser");
+    accountUser.innerHTML = manageableUsers.length
+      ? manageableUsers.map(user => `<option value="${escapeHtml(user.id)}" data-active="${user.active}">${escapeHtml(user.email)}</option>`).join("")
+      : '<option value="">Yönetilecek başka kullanıcı yok</option>';
+    accountUser.disabled = !manageableUsers.length;
+    document.querySelectorAll("#resetPasswordForm button, #resetPasswordForm input, #accountStatusForm button, #accountStatusForm select")
+      .forEach(element => { element.disabled = !manageableUsers.length; });
+    syncSelectedAccountStatus();
   } catch (error) {
     userStatus.className = "admin-status error";
     userStatus.textContent = error.message;
   }
+}
+
+function syncSelectedAccountStatus() {
+  const selected = document.querySelector("#accountUser").selectedOptions[0];
+  if (!selected?.value) return;
+  document.querySelector("#accountActive").value = selected.dataset.active === "true" ? "true" : "false";
 }
 
 function updateScenarioText() {
@@ -544,6 +610,54 @@ document.querySelector("#assignAccessForm").addEventListener("submit", async eve
     status.textContent = error.message;
   }
 });
+document.querySelector("#accountUser").addEventListener("change", syncSelectedAccountStatus);
+document.querySelector("#resetPasswordForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  const status = document.querySelector("#accountStatus");
+  status.className = "admin-status";
+  status.textContent = "Geçici parola atanıyor…";
+  try {
+    const response = await apiFetch("/api/users/password-reset", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id: document.querySelector("#accountUser").value,
+        new_password: document.querySelector("#temporaryPassword").value
+      })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Parola sıfırlanamadı.");
+    status.textContent = result.message;
+    event.target.reset();
+    await loadAccessData();
+  } catch (error) {
+    status.className = "admin-status error";
+    status.textContent = error.message;
+  }
+});
+document.querySelector("#accountStatusForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  const status = document.querySelector("#accountStatus");
+  status.className = "admin-status";
+  status.textContent = "Hesap durumu güncelleniyor…";
+  try {
+    const response = await apiFetch("/api/users/status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id: document.querySelector("#accountUser").value,
+        active: document.querySelector("#accountActive").value === "true"
+      })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Hesap durumu güncellenemedi.");
+    status.textContent = result.message;
+    await loadAccessData();
+  } catch (error) {
+    status.className = "admin-status error";
+    status.textContent = error.message;
+  }
+});
 authForm.addEventListener("submit", async event => {
   event.preventDefault();
   authMessage.textContent = "";
@@ -569,6 +683,40 @@ authForm.addEventListener("submit", async event => {
     submit.textContent = setupRequired ? "Yönetici hesabını oluştur" : "Giriş yap";
   }
 });
+passwordButton.addEventListener("click", () => showPasswordGate(false));
+passwordCancel.addEventListener("click", hidePasswordGate);
+passwordForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  passwordMessage.textContent = "";
+  const newPassword = document.querySelector("#newPassword").value;
+  if (newPassword !== document.querySelector("#newPasswordConfirm").value) {
+    passwordMessage.textContent = "Yeni parola alanları birbiriyle eşleşmiyor.";
+    return;
+  }
+  const submit = document.querySelector("#passwordSubmit");
+  submit.disabled = true;
+  submit.textContent = "Güncelleniyor…";
+  try {
+    const response = await fetch("/api/auth/password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        current_password: document.querySelector("#currentPassword").value,
+        new_password: newPassword
+      })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Parola güncellenemedi.");
+    passwordChangeForced = false;
+    passwordGate.hidden = true;
+    hideAuthGate(result.user);
+  } catch (error) {
+    passwordMessage.textContent = error.message;
+  } finally {
+    submit.disabled = false;
+    submit.textContent = "Parolayı güncelle";
+  }
+});
 logoutButton.addEventListener("click", async () => {
   await fetch("/api/auth/logout", {
     method: "POST",
@@ -576,6 +724,7 @@ logoutButton.addEventListener("click", async () => {
     body: "{}"
   });
   currentUser = null;
+  passwordChangeForced = false;
   showAuthGate(false);
 });
 document.querySelector("#drawerClose").addEventListener("click", closeDrawer);

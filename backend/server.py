@@ -95,6 +95,16 @@ class NexTraceHandler(SimpleHTTPRequestHandler):
         user = self._current_user()
         if not user:
             self._json({"error": "Oturum açılması gerekiyor."}, HTTPStatus.UNAUTHORIZED)
+            return None
+        if user["must_change_password"]:
+            self._json(
+                {
+                    "error": "Devam etmeden önce geçici parolanı değiştirmelisin.",
+                    "code": "PASSWORD_CHANGE_REQUIRED",
+                },
+                HTTPStatus.FORBIDDEN,
+            )
+            return None
         return user
 
     def _require_admin(self, user: dict) -> bool:
@@ -272,6 +282,16 @@ class NexTraceHandler(SimpleHTTPRequestHandler):
                     extra_headers={"Set-Cookie": self._session_cookie_header("", 0)},
                 )
                 return
+            if path == "/api/auth/password":
+                user = self._current_user()
+                if not user:
+                    self._json(
+                        {"error": "Oturum açılması gerekiyor."},
+                        HTTPStatus.UNAUTHORIZED,
+                    )
+                    return
+                self._handle_change_password(payload, user)
+                return
             user = self._require_auth()
             if not user:
                 return
@@ -287,6 +307,16 @@ class NexTraceHandler(SimpleHTTPRequestHandler):
                 if not self._require_admin(user):
                     return
                 self._handle_create_user(payload)
+                return
+            if path == "/api/users/password-reset":
+                if not self._require_admin(user):
+                    return
+                self._handle_admin_password_reset(payload)
+                return
+            if path == "/api/users/status":
+                if not self._require_admin(user):
+                    return
+                self._handle_user_status(payload)
                 return
             if path == "/api/projects/access":
                 if not self._require_admin(user):
@@ -345,6 +375,59 @@ class NexTraceHandler(SimpleHTTPRequestHandler):
             self._json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
             return
         self._json({"user": user}, HTTPStatus.CREATED)
+
+    def _handle_change_password(self, payload: dict, user: dict) -> None:
+        try:
+            token, updated_user, expires_at = AUTH.change_password(
+                user["id"],
+                str(payload.get("current_password", "")),
+                str(payload.get("new_password", "")),
+            )
+        except AuthenticationError as exc:
+            self._json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+        self._json(
+            {
+                "user": updated_user,
+                "expires_at": expires_at,
+                "message": "Parolan güncellendi; diğer oturumlar kapatıldı.",
+            },
+            extra_headers={"Set-Cookie": self._session_cookie_header(token)},
+        )
+
+    def _handle_admin_password_reset(self, payload: dict) -> None:
+        try:
+            user = AUTH.admin_reset_password(
+                str(payload.get("user_id", "")).strip(),
+                str(payload.get("new_password", "")),
+            )
+        except AuthenticationError as exc:
+            self._json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+        self._json(
+            {
+                "user": user,
+                "message": "Geçici parola atandı; kullanıcının açık oturumları kapatıldı.",
+            }
+        )
+
+    def _handle_user_status(self, payload: dict) -> None:
+        active = payload.get("active")
+        if not isinstance(active, bool):
+            raise ValueError("active alanı true veya false olmalıdır.")
+        user = AUTH.set_user_active(
+            str(payload.get("user_id", "")).strip(), active
+        )
+        self._json(
+            {
+                "user": user,
+                "message": (
+                    "Hesap yeniden etkinleştirildi."
+                    if active
+                    else "Hesap devre dışı bırakıldı; açık oturumları kapatıldı."
+                ),
+            }
+        )
 
     def _handle_project_access(self, payload: dict) -> None:
         STORE.set_project_access(

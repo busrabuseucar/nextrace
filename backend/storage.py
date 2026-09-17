@@ -76,6 +76,8 @@ class ProjectStore:
                     password_salt BLOB NOT NULL,
                     password_iterations INTEGER NOT NULL,
                     role TEXT NOT NULL CHECK(role IN ('admin', 'analyst')),
+                    active INTEGER NOT NULL DEFAULT 1,
+                    must_change_password INTEGER NOT NULL DEFAULT 0,
                     created_at TEXT NOT NULL
                 );
 
@@ -100,6 +102,17 @@ class ProjectStore:
                 );
                 """
             )
+            user_columns = {
+                row["name"] for row in connection.execute("PRAGMA table_info(users)")
+            }
+            if "active" not in user_columns:
+                connection.execute(
+                    "ALTER TABLE users ADD COLUMN active INTEGER NOT NULL DEFAULT 1"
+                )
+            if "must_change_password" not in user_columns:
+                connection.execute(
+                    "ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0"
+                )
 
     @staticmethod
     def _now() -> str:
@@ -292,19 +305,48 @@ class ProjectStore:
                     created_at,
                 ),
             )
-        return {"id": user_id, "email": email.lower(), "role": "admin"}
+        return {
+            "id": user_id,
+            "email": email.lower(),
+            "role": "admin",
+            "active": True,
+            "must_change_password": False,
+        }
 
     def get_user_by_email(self, email: str) -> dict | None:
         with self._connect() as connection:
             row = connection.execute(
                 """
                 SELECT id, email, password_hash, password_salt,
-                       password_iterations, role, created_at
+                       password_iterations, role, active,
+                       must_change_password, created_at
                 FROM users WHERE email = ?
                 """,
                 (email.lower(),),
             ).fetchone()
-        return dict(row) if row else None
+        return self._normalize_user(row)
+
+    def get_user_by_id(self, user_id: str) -> dict | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT id, email, password_hash, password_salt,
+                       password_iterations, role, active,
+                       must_change_password, created_at
+                FROM users WHERE id = ?
+                """,
+                (user_id,),
+            ).fetchone()
+        return self._normalize_user(row)
+
+    @staticmethod
+    def _normalize_user(row: sqlite3.Row | None) -> dict | None:
+        if not row:
+            return None
+        user = dict(row)
+        user["active"] = bool(user["active"])
+        user["must_change_password"] = bool(user["must_change_password"])
+        return user
 
     def create_user(
         self,
@@ -324,8 +366,9 @@ class ProjectStore:
                     """
                     INSERT INTO users(
                         id, email, password_hash, password_salt,
-                        password_iterations, role, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                        password_iterations, role, active,
+                        must_change_password, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, 1, 1, ?)
                     """,
                     (
                         user_id,
@@ -339,17 +382,84 @@ class ProjectStore:
                 )
         except sqlite3.IntegrityError as exc:
             raise ValueError("Bu e-posta adresi zaten kayıtlı.") from exc
-        return {"id": user_id, "email": email.lower(), "role": role, "created_at": created_at}
+        return {
+            "id": user_id,
+            "email": email.lower(),
+            "role": role,
+            "active": True,
+            "must_change_password": True,
+            "created_at": created_at,
+        }
 
     def list_users(self) -> list[dict]:
         with self._connect() as connection:
             rows = connection.execute(
                 """
-                SELECT id, email, role, created_at
+                SELECT id, email, role, active, must_change_password, created_at
                 FROM users ORDER BY created_at ASC
                 """
             ).fetchall()
-        return [dict(row) for row in rows]
+        return [self._normalize_user(row) for row in rows]
+
+    def update_user_password(
+        self,
+        user_id: str,
+        password_hash: bytes,
+        password_salt: bytes,
+        password_iterations: int,
+        must_change_password: bool,
+    ) -> dict:
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            user = connection.execute(
+                "SELECT 1 FROM users WHERE id = ?", (user_id,)
+            ).fetchone()
+            if not user:
+                raise KeyError(f"Kullanıcı bulunamadı: {user_id}")
+            connection.execute(
+                """
+                UPDATE users
+                SET password_hash = ?, password_salt = ?, password_iterations = ?,
+                    must_change_password = ?
+                WHERE id = ?
+                """,
+                (
+                    password_hash,
+                    password_salt,
+                    password_iterations,
+                    int(must_change_password),
+                    user_id,
+                ),
+            )
+            connection.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+        updated = self.get_user_by_id(user_id)
+        if not updated:
+            raise KeyError(f"Kullanıcı bulunamadı: {user_id}")
+        return updated
+
+    def set_user_active(self, user_id: str, active: bool) -> dict:
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            user = connection.execute(
+                "SELECT role, active FROM users WHERE id = ?", (user_id,)
+            ).fetchone()
+            if not user:
+                raise KeyError(f"Kullanıcı bulunamadı: {user_id}")
+            if not active and user["role"] == "admin" and bool(user["active"]):
+                active_admins = connection.execute(
+                    "SELECT COUNT(*) AS count FROM users WHERE role = 'admin' AND active = 1"
+                ).fetchone()["count"]
+                if active_admins <= 1:
+                    raise ValueError("Son aktif yönetici hesabı devre dışı bırakılamaz.")
+            connection.execute(
+                "UPDATE users SET active = ? WHERE id = ?", (int(active), user_id)
+            )
+            if not active:
+                connection.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+        updated = self.get_user_by_id(user_id)
+        if not updated:
+            raise KeyError(f"Kullanıcı bulunamadı: {user_id}")
+        return updated
 
     def set_project_access(self, project_id: str, user_id: str, access_level: str) -> None:
         if access_level not in {"viewer", "analyst"}:
@@ -418,14 +528,15 @@ class ProjectStore:
             connection.execute("DELETE FROM sessions WHERE expires_at <= ?", (now,))
             row = connection.execute(
                 """
-                SELECT u.id, u.email, u.role, s.expires_at
+                SELECT u.id, u.email, u.role, u.active,
+                       u.must_change_password, s.expires_at
                 FROM sessions s
                 JOIN users u ON u.id = s.user_id
-                WHERE s.token_hash = ? AND s.expires_at > ?
+                WHERE s.token_hash = ? AND s.expires_at > ? AND u.active = 1
                 """,
                 (token_hash, now),
             ).fetchone()
-        return dict(row) if row else None
+        return self._normalize_user(row)
 
     def delete_session(self, token_hash: str) -> None:
         with self._connect() as connection:

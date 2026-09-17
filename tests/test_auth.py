@@ -27,6 +27,7 @@ class AuthServiceTests(unittest.TestCase):
             "admin@nextrace.local", "GuvenliParola2026"
         )
         self.assertEqual(setup_user["role"], "admin")
+        self.assertFalse(setup_user["must_change_password"])
         self.assertEqual(self.auth.authenticate(setup_token)["email"], "admin@nextrace.local")
 
         login_token, login_user, _ = self.auth.login(
@@ -64,6 +65,77 @@ class AuthServiceTests(unittest.TestCase):
         self.assertEqual(self.store.get_project_access("demo", analyst["id"]), "viewer")
         with self.assertRaises(ValueError):
             self.store.set_project_access("demo", admin["id"], "analyst")
+
+    def test_user_changes_temporary_password_and_old_sessions_are_closed(self):
+        self.auth.setup("admin@nextrace.local", "GuvenliParola2026")
+        analyst = self.auth.create_user(
+            "analyst@nextrace.local", "GeciciParola2026", "analyst"
+        )
+        self.assertTrue(analyst["must_change_password"])
+        old_token, login_user, _ = self.auth.login(
+            "analyst@nextrace.local", "GeciciParola2026"
+        )
+        self.assertTrue(login_user["must_change_password"])
+
+        new_token, updated_user, _ = self.auth.change_password(
+            analyst["id"], "GeciciParola2026", "YeniGuvenliParola2026"
+        )
+        self.assertFalse(updated_user["must_change_password"])
+        self.assertIsNone(self.auth.authenticate(old_token))
+        self.assertEqual(self.auth.authenticate(new_token)["id"], analyst["id"])
+        with self.assertRaises(AuthenticationError):
+            self.auth.login("analyst@nextrace.local", "GeciciParola2026")
+
+    def test_admin_reset_requires_password_change_and_closes_sessions(self):
+        self.auth.setup("admin@nextrace.local", "GuvenliParola2026")
+        analyst = self.auth.create_user(
+            "analyst@nextrace.local", "GeciciParola2026", "analyst"
+        )
+        old_token, _, _ = self.auth.login(
+            "analyst@nextrace.local", "GeciciParola2026"
+        )
+
+        reset_user = self.auth.admin_reset_password(
+            analyst["id"], "YoneticiGecici2026"
+        )
+        self.assertTrue(reset_user["must_change_password"])
+        self.assertIsNone(self.auth.authenticate(old_token))
+        _, login_user, _ = self.auth.login(
+            "analyst@nextrace.local", "YoneticiGecici2026"
+        )
+        self.assertTrue(login_user["must_change_password"])
+
+    def test_deactivated_user_cannot_login_and_session_is_closed(self):
+        self.auth.setup("admin@nextrace.local", "GuvenliParola2026")
+        analyst = self.auth.create_user(
+            "analyst@nextrace.local", "GeciciParola2026", "analyst"
+        )
+        token, _, _ = self.auth.login("analyst@nextrace.local", "GeciciParola2026")
+        disabled = self.auth.set_user_active(analyst["id"], False)
+        self.assertFalse(disabled["active"])
+        self.assertIsNone(self.auth.authenticate(token))
+        with self.assertRaises(AuthenticationError):
+            self.auth.login("analyst@nextrace.local", "GeciciParola2026")
+
+        enabled = self.auth.set_user_active(analyst["id"], True)
+        self.assertTrue(enabled["active"])
+        self.assertEqual(
+            self.auth.login("analyst@nextrace.local", "GeciciParola2026")[1]["id"],
+            analyst["id"],
+        )
+
+    def test_last_active_admin_cannot_be_deactivated(self):
+        _, admin, _ = self.auth.setup(
+            "admin@nextrace.local", "GuvenliParola2026"
+        )
+        with self.assertRaisesRegex(ValueError, "Son aktif yönetici"):
+            self.auth.set_user_active(admin["id"], False)
+
+        second_admin = self.auth.create_user(
+            "second-admin@nextrace.local", "IkinciYonetici2026", "admin"
+        )
+        disabled = self.auth.set_user_active(second_admin["id"], False)
+        self.assertFalse(disabled["active"])
 
 
 if __name__ == "__main__":

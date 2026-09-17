@@ -35,7 +35,7 @@ Proje üçüncü taraf paket gerektirmeyen Python API ve web arayüzünden oluş
    ```
 
 3. Tarayıcıda `http://localhost:8000` adresini aç.
-4. İlk açılışta yönetici e-posta adresini ve en az 12 karakterli parolanı belirle. Sonraki erişimlerde bu hesapla giriş yap.
+4. İlk açılışta yönetici e-posta adresini ve en az 12 karakterli parolanı belirle. Sonraki erişimlerde bu hesapla giriş yap. Yönetici tarafından oluşturulan hesaplar, geçici parolalarını ilk girişte değiştirmeden proje verilerine erişemez.
 
 ## Dosya yapısı
 
@@ -90,7 +90,10 @@ source,target,relation,reason
 - `POST /api/auth/setup`: yalnızca ilk yönetici hesabını oluşturma
 - `POST /api/auth/login`: güvenli oturum açma
 - `POST /api/auth/logout`: oturumu sonlandırma
+- `POST /api/auth/password`: oturum sahibinin parolasını değiştirme
 - `POST /api/users`: yönetici tarafından kullanıcı oluşturma
+- `POST /api/users/password-reset`: yönetici tarafından geçici parola atama
+- `POST /api/users/status`: kullanıcı hesabını etkinleştirme veya devre dışı bırakma
 - `POST /api/projects/access`: kullanıcıya proje yetkisi atama
 - `POST /api/projects/import`: CSV metinlerinden kalıcı proje grafiği oluşturma
 - `POST /api/analyze`: seçilen düğümden dinamik etki analizi çalıştırma
@@ -105,7 +108,7 @@ python -m unittest discover -s tests -v
 
 - Jira, GitLab ve test yönetim araçları için gerçek bağlayıcılar
 - Proje grafiği sürümleme ve değişiklik karşılaştırma
-- Parola değiştirme, sıfırlama ve hesap devre dışı bırakma
+- Kurumsal kimlik sağlayıcı (SSO/OIDC) ve e-posta tabanlı hesap kurtarma
 - Müşteri verisiyle doğrulanan risk modeli
 - Kurum içi veya özel bulut kurulumu
 
@@ -120,6 +123,8 @@ Hedef ürün, müşteri verilerini müşteri ortamında tutacak şekilde kurum i
 - Proje ve analiz API'leri kimlik doğrulama olmadan kullanılamaz.
 - Analistler yalnızca atandıkları projeleri görebilir; `viewer` analiz çalıştıramaz.
 - Kullanıcı oluşturma, proje içe aktarma ve yetki atama yalnızca yöneticiye açıktır.
+- Yönetici parola sıfırladığında eski oturumlar kapatılır ve ilk girişte parola değişikliği zorunlu tutulur.
+- Devre dışı bırakılan hesapların bütün açık oturumları iptal edilir; son aktif yönetici hesabı kapatılamaz.
 
 HTTPS arkasındaki üretim kurulumunda güvenli çerez zorunluluğunu etkinleştir:
 
