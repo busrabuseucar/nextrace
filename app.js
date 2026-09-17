@@ -81,6 +81,7 @@ let currentScenario = scenarios.latency;
 let currentFilter = "all";
 let analyzed = false;
 let currentProjectId = "demo";
+let currentAnalysisId = null;
 
 function updateScenarioText() {
   currentScenario = scenarios[scenarioSelect.value];
@@ -94,6 +95,7 @@ function updateScenarioText() {
 
 function resetAnalysis() {
   analyzed = false;
+  currentAnalysisId = null;
   graphStage.classList.remove("analyzed");
   traceGraph.innerHTML = "";
   evidenceTable.innerHTML = '<tr class="placeholder-row"><td colspan="5">Sonuçlar için etki analizini çalıştır.</td></tr>';
@@ -231,6 +233,7 @@ async function runAnalysis() {
       note: result.note,
       pathCount: result.path_count
     };
+    currentAnalysisId = result.analysis_id;
     analyzed = true;
     renderSummary();
     renderGraph();
@@ -327,11 +330,12 @@ function exportCsv() {
 }
 
 function buildAuditLog() {
+  const analysisId = currentAnalysisId || "Henüz analiz oluşturulmadı";
   const events = [
     ["09:42:11", `${currentScenario.id} değişiklik girdisi kaydedildi`, "SYS-REQ kaynak sürümü: 7.3"],
     ["09:42:12", "İzlenebilirlik grafiği tarandı", `${currentScenario.items.length} etkilenmiş varlık, ${currentScenario.pathCount} kanıt yolu`],
     ["09:42:13", "Risk puanları üretildi", `Güven skoru: %${currentScenario.confidence}`],
-    ["09:42:14", "Sonuç paketi mühürlendi", "Analiz kimliği: NXT-2026-091"]
+    ["09:42:14", "Sonuç paketi kalıcı depoya kaydedildi", `Analiz kimliği: ${analysisId}`]
   ];
   document.querySelector("#auditTimeline").innerHTML = events.map(([time, title, meta]) => `
     <div class="audit-event"><time>${time}</time><strong>${title}</strong><span>${meta}</span></div>`).join("");

@@ -6,7 +6,7 @@ NexTrace AI, kritik mühendislik projelerinde bir değişikliğin gereksinim, ko
 
 ## Mevcut sürüm — çalışan MVP temeli
 
-Bu depo, ürün fikrini ve temel kullanıcı akışını doğrulayan **dinamik etki analizi motoru ile çalışan MVP temelini** içerir. Arayüz artık hazır sonuçları taklit etmez; Python API, yüklenen izlenebilirlik grafiğini tarayarak etkilenen varlıkları, kanıt yollarını ve risk puanlarını hesaplar. Henüz gerçek kurum sistemlerine doğrudan bağlanan üretim sürümü veya doğrulanmış müşteri pilotu değildir.
+Bu depo, ürün fikrini ve temel kullanıcı akışını doğrulayan **dinamik etki analizi motoru ile çalışan MVP temelini** içerir. Arayüz artık hazır sonuçları taklit etmez; Python API, yüklenen izlenebilirlik grafiğini tarayarak etkilenen varlıkları, kanıt yollarını ve risk puanlarını hesaplar. Projeler ve analiz geçmişi SQLite veritabanında kalıcı olarak tutulur. Henüz gerçek kurum sistemlerine doğrudan bağlanan üretim sürümü veya doğrulanmış müşteri pilotu değildir.
 
 Demoda üç örnek değişiklik senaryosu bulunur:
 
@@ -46,11 +46,13 @@ Proje üçüncü taraf paket gerektirmeyen Python API ve web arayüzünden oluş
 ├── backend/
 │   ├── server.py
 │   ├── engine.py
+│   ├── storage.py
 │   └── data/
 │       ├── nodes.csv
 │       └── edges.csv
 ├── tests/
-│   └── test_engine.py
+│   ├── test_engine.py
+│   └── test_storage.py
 ├── docs/
 │   └── nextrace-dashboard.png
 └── assets/
@@ -77,7 +79,9 @@ source,target,relation,reason
 ## API
 
 - `GET /api/health`: servis ve demo grafiği durumu
-- `POST /api/projects/import`: CSV metinlerinden geçici proje grafiği oluşturma
+- `GET /api/projects`: kalıcı proje listesi ve grafik büyüklükleri
+- `GET /api/analyses?project_id=demo`: kayıtlı analiz geçmişi
+- `POST /api/projects/import`: CSV metinlerinden kalıcı proje grafiği oluşturma
 - `POST /api/analyze`: seçilen düğümden dinamik etki analizi çalıştırma
 
 ## Test

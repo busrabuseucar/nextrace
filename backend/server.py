@@ -3,21 +3,33 @@
 from __future__ import annotations
 
 import json
+import os
+import re
 import sys
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from engine import TraceGraph
+from storage import ProjectStore
 
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = Path(__file__).resolve().parent / "data"
-PROJECTS: dict[str, TraceGraph] = {
-    "demo": TraceGraph.from_csv_files(DATA_DIR / "nodes.csv", DATA_DIR / "edges.csv")
-}
+DATABASE_PATH = Path(os.environ.get("NEXTRACE_DB_PATH", DATA_DIR / "nextrace.db"))
+STORE = ProjectStore(DATABASE_PATH)
 MAX_BODY_BYTES = 2 * 1024 * 1024
+
+
+def ensure_demo_project() -> None:
+    if STORE.has_project("demo"):
+        return
+    graph = TraceGraph.from_csv_files(DATA_DIR / "nodes.csv", DATA_DIR / "edges.csv")
+    STORE.save_project("demo", "AQUILA / Uçuş Kontrol Sistemi", graph)
+
+
+ensure_demo_project()
 
 
 class NexTraceHandler(SimpleHTTPRequestHandler):
@@ -49,16 +61,36 @@ class NexTraceHandler(SimpleHTTPRequestHandler):
         return payload
 
     def do_GET(self) -> None:  # noqa: N802
-        path = urlparse(self.path).path
+        parsed = urlparse(self.path)
+        path = parsed.path
         if path == "/api/health":
+            projects = STORE.list_projects()
+            demo = next(project for project in projects if project["id"] == "demo")
             self._json(
                 {
                     "status": "ok",
                     "service": "nextrace-mvp",
-                    "projects": sorted(PROJECTS),
-                    "demo_nodes": len(PROJECTS["demo"].nodes),
+                    "database": "sqlite",
+                    "project_count": len(projects),
+                    "demo_nodes": demo["node_count"],
                 }
             )
+            return
+        if path == "/api/projects":
+            self._json({"projects": STORE.list_projects()})
+            return
+        if path == "/api/analyses":
+            query = parse_qs(parsed.query)
+            project_id = query.get("project_id", ["demo"])[0].strip()
+            try:
+                limit = int(query.get("limit", ["20"])[0])
+            except ValueError:
+                self._json({"error": "limit tam sayı olmalıdır."}, HTTPStatus.BAD_REQUEST)
+                return
+            if not STORE.has_project(project_id):
+                self._json({"error": f"Proje bulunamadı: {project_id}"}, HTTPStatus.NOT_FOUND)
+                return
+            self._json({"analyses": STORE.list_analyses(project_id, limit)})
             return
         super().do_GET()
 
@@ -83,25 +115,26 @@ class NexTraceHandler(SimpleHTTPRequestHandler):
         changed_node_id = str(payload.get("changed_node_id", "")).strip()
         if not changed_node_id:
             raise ValueError("changed_node_id zorunludur.")
-        if project_id not in PROJECTS:
-            raise KeyError(f"Proje bulunamadı: {project_id}")
-        result = PROJECTS[project_id].analyze(
+        graph = STORE.load_graph(project_id)
+        result = graph.analyze(
             changed_node_id=changed_node_id,
             current_value=str(payload.get("current_value", "")),
             proposed_value=str(payload.get("proposed_value", "")),
         )
-        self._json({"project_id": project_id, **result})
+        analysis_id = STORE.save_analysis(project_id, result)
+        self._json({"analysis_id": analysis_id, "project_id": project_id, **result})
 
     def _handle_import(self, payload: dict) -> None:
         project_id = str(payload.get("project_id", "uploaded")).strip()
-        if not project_id or len(project_id) > 64:
-            raise ValueError("project_id 1-64 karakter arasında olmalıdır.")
+        if not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", project_id):
+            raise ValueError("project_id yalnızca harf, sayı, nokta, tire ve alt çizgi içerebilir.")
+        project_name = str(payload.get("name", project_id)).strip()[:120] or project_id
         nodes_csv = payload.get("nodes_csv")
         edges_csv = payload.get("edges_csv")
         if not isinstance(nodes_csv, str) or not isinstance(edges_csv, str):
             raise ValueError("nodes_csv ve edges_csv metin olarak gönderilmelidir.")
         graph = TraceGraph.from_csv_text(nodes_csv, edges_csv)
-        PROJECTS[project_id] = graph
+        STORE.save_project(project_id, project_name, graph)
         self._json(
             {
                 "project_id": project_id,
