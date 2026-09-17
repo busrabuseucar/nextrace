@@ -4,13 +4,18 @@ from __future__ import annotations
 
 import json
 import os
+import posixpath
 import re
 import sys
+import threading
+import time
+from http.cookies import SimpleCookie
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
+from auth import AuthenticationError, AuthService
 from engine import TraceGraph
 from storage import ProjectStore
 
@@ -19,7 +24,15 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = Path(__file__).resolve().parent / "data"
 DATABASE_PATH = Path(os.environ.get("NEXTRACE_DB_PATH", DATA_DIR / "nextrace.db"))
 STORE = ProjectStore(DATABASE_PATH)
+AUTH = AuthService(STORE)
 MAX_BODY_BYTES = 2 * 1024 * 1024
+SESSION_COOKIE = "nextrace_session"
+FAILED_LOGINS: dict[str, list[float]] = {}
+FAILED_LOGINS_LOCK = threading.Lock()
+MAX_LOGIN_ATTEMPTS = 5
+LOGIN_WINDOW_SECONDS = 15 * 60
+PUBLIC_FILES = {"/", "/index.html", "/styles.css", "/app.js"}
+PUBLIC_PREFIXES = ("/assets/", "/docs/")
 
 
 def ensure_demo_project() -> None:
@@ -33,17 +46,97 @@ ensure_demo_project()
 
 
 class NexTraceHandler(SimpleHTTPRequestHandler):
+    server_version = "NexTrace"
+    sys_version = ""
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(ROOT), **kwargs)
 
-    def _json(self, payload: dict, status: HTTPStatus = HTTPStatus.OK) -> None:
+    def end_headers(self) -> None:
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header(
+            "Content-Security-Policy",
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'",
+        )
+        super().end_headers()
+
+    def _json(
+        self,
+        payload: dict,
+        status: HTTPStatus = HTTPStatus.OK,
+        extra_headers: dict[str, str] | None = None,
+    ) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        for name, value in (extra_headers or {}).items():
+            self.send_header(name, value)
         self.end_headers()
         self.wfile.write(body)
+
+    def _session_token(self) -> str | None:
+        cookie = SimpleCookie()
+        try:
+            cookie.load(self.headers.get("Cookie", ""))
+        except Exception:
+            return None
+        morsel = cookie.get(SESSION_COOKIE)
+        return morsel.value if morsel else None
+
+    def _current_user(self) -> dict | None:
+        return AUTH.authenticate(self._session_token())
+
+    def _require_auth(self) -> dict | None:
+        user = self._current_user()
+        if not user:
+            self._json({"error": "Oturum açılması gerekiyor."}, HTTPStatus.UNAUTHORIZED)
+        return user
+
+    def _session_cookie_header(self, token: str, max_age: int = 12 * 60 * 60) -> str:
+        secure = "; Secure" if os.environ.get("NEXTRACE_SECURE_COOKIES") == "1" else ""
+        return (
+            f"{SESSION_COOKIE}={token}; HttpOnly; Path=/; SameSite=Strict; "
+            f"Max-Age={max_age}{secure}"
+        )
+
+    def _valid_origin(self) -> bool:
+        origin = self.headers.get("Origin")
+        if not origin:
+            return True
+        if urlparse(origin).netloc == self.headers.get("Host"):
+            return True
+        self._json({"error": "İstek kaynağı reddedildi."}, HTTPStatus.FORBIDDEN)
+        return False
+
+    def _login_allowed(self) -> bool:
+        cutoff = time.time() - LOGIN_WINDOW_SECONDS
+        address = self.client_address[0]
+        with FAILED_LOGINS_LOCK:
+            attempts = [stamp for stamp in FAILED_LOGINS.get(address, []) if stamp > cutoff]
+            FAILED_LOGINS[address] = attempts
+            return len(attempts) < MAX_LOGIN_ATTEMPTS
+
+    def _record_failed_login(self) -> None:
+        with FAILED_LOGINS_LOCK:
+            FAILED_LOGINS.setdefault(self.client_address[0], []).append(time.time())
+
+    def _clear_failed_logins(self) -> None:
+        with FAILED_LOGINS_LOCK:
+            FAILED_LOGINS.pop(self.client_address[0], None)
+
+    @staticmethod
+    def _public_file_allowed(path: str) -> bool:
+        normalized = posixpath.normpath(unquote(path))
+        if not normalized.startswith("/"):
+            normalized = f"/{normalized}"
+        return normalized in PUBLIC_FILES or any(
+            normalized.startswith(prefix) for prefix in PUBLIC_PREFIXES
+        )
 
     def _read_json(self) -> dict:
         try:
@@ -63,6 +156,16 @@ class NexTraceHandler(SimpleHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         path = parsed.path
+        if path == "/api/auth/status":
+            user = self._current_user()
+            self._json(
+                {
+                    "setup_required": STORE.user_count() == 0,
+                    "authenticated": user is not None,
+                    "user": user,
+                }
+            )
+            return
         if path == "/api/health":
             projects = STORE.list_projects()
             demo = next(project for project in projects if project["id"] == "demo")
@@ -77,9 +180,13 @@ class NexTraceHandler(SimpleHTTPRequestHandler):
             )
             return
         if path == "/api/projects":
+            if not self._require_auth():
+                return
             self._json({"projects": STORE.list_projects()})
             return
         if path == "/api/analyses":
+            if not self._require_auth():
+                return
             query = parse_qs(parsed.query)
             project_id = query.get("project_id", ["demo"])[0].strip()
             try:
@@ -92,12 +199,41 @@ class NexTraceHandler(SimpleHTTPRequestHandler):
                 return
             self._json({"analyses": STORE.list_analyses(project_id, limit)})
             return
+        if not self._public_file_allowed(path):
+            self._json({"error": "Kaynak bulunamadı."}, HTTPStatus.NOT_FOUND)
+            return
         super().do_GET()
+
+    def do_HEAD(self) -> None:  # noqa: N802
+        path = urlparse(self.path).path
+        if not self._public_file_allowed(path):
+            self.send_response(HTTPStatus.NOT_FOUND)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        super().do_HEAD()
 
     def do_POST(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
+        if not self._valid_origin():
+            return
         try:
             payload = self._read_json()
+            if path == "/api/auth/setup":
+                self._handle_setup(payload)
+                return
+            if path == "/api/auth/login":
+                self._handle_login(payload)
+                return
+            if path == "/api/auth/logout":
+                AUTH.logout(self._session_token())
+                self._json(
+                    {"message": "Oturum kapatıldı."},
+                    extra_headers={"Set-Cookie": self._session_cookie_header("", 0)},
+                )
+                return
+            if not self._require_auth():
+                return
             if path == "/api/analyze":
                 self._handle_analyze(payload)
                 return
@@ -109,6 +245,41 @@ class NexTraceHandler(SimpleHTTPRequestHandler):
             self._json({"error": str(exc).strip("'")}, HTTPStatus.NOT_FOUND)
         except (TypeError, ValueError) as exc:
             self._json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    def _handle_setup(self, payload: dict) -> None:
+        try:
+            token, user, expires_at = AUTH.setup(
+                str(payload.get("email", "")), str(payload.get("password", ""))
+            )
+        except AuthenticationError as exc:
+            self._json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+        self._json(
+            {"user": user, "expires_at": expires_at},
+            HTTPStatus.CREATED,
+            {"Set-Cookie": self._session_cookie_header(token)},
+        )
+
+    def _handle_login(self, payload: dict) -> None:
+        if not self._login_allowed():
+            self._json(
+                {"error": "Çok fazla başarısız deneme. 15 dakika sonra tekrar dene."},
+                HTTPStatus.TOO_MANY_REQUESTS,
+            )
+            return
+        try:
+            token, user, expires_at = AUTH.login(
+                str(payload.get("email", "")), str(payload.get("password", ""))
+            )
+        except AuthenticationError as exc:
+            self._record_failed_login()
+            self._json({"error": str(exc)}, HTTPStatus.UNAUTHORIZED)
+            return
+        self._clear_failed_logins()
+        self._json(
+            {"user": user, "expires_at": expires_at},
+            extra_headers={"Set-Cookie": self._session_cookie_header(token)},
+        )
 
     def _handle_analyze(self, payload: dict) -> None:
         project_id = str(payload.get("project_id", "demo")).strip()

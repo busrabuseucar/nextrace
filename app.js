@@ -77,11 +77,57 @@ const graphStage = document.querySelector("#graphStage");
 const changedNodeInput = document.querySelector("#changedNodeInput");
 const importButton = document.querySelector("#importButton");
 const importStatus = document.querySelector("#importStatus");
+const authGate = document.querySelector("#authGate");
+const authForm = document.querySelector("#authForm");
+const authMessage = document.querySelector("#authMessage");
+const logoutButton = document.querySelector("#logoutButton");
 let currentScenario = scenarios.latency;
 let currentFilter = "all";
 let analyzed = false;
 let currentProjectId = "demo";
 let currentAnalysisId = null;
+let setupRequired = false;
+
+function showAuthGate(requiresSetup = false) {
+  setupRequired = requiresSetup;
+  authGate.hidden = false;
+  authForm.hidden = false;
+  document.querySelector("#authTitle").textContent = requiresSetup ? "İlk yönetici hesabını oluştur" : "Oturum aç";
+  document.querySelector("#authHint").textContent = requiresSetup
+    ? "Bu işlem yalnızca bir kez yapılır. En az 12 karakterli, harf ve rakam içeren bir parola belirle."
+    : "Proje verilerine erişmek için yönetici hesabınla giriş yap.";
+  document.querySelector("#authSubmit").textContent = requiresSetup ? "Yönetici hesabını oluştur" : "Giriş yap";
+  document.querySelector("#authPassword").autocomplete = requiresSetup ? "new-password" : "current-password";
+  logoutButton.hidden = true;
+}
+
+function hideAuthGate(user) {
+  authGate.hidden = true;
+  authMessage.textContent = "";
+  authForm.reset();
+  logoutButton.hidden = false;
+  logoutButton.textContent = `${user.email} · Çıkış`;
+}
+
+async function initializeAuth() {
+  try {
+    const response = await fetch("/api/auth/status", { cache: "no-store" });
+    if (!response.ok) throw new Error("Kimlik doğrulama servisi yanıt vermedi.");
+    const result = await response.json();
+    if (result.authenticated) hideAuthGate(result.user);
+    else showAuthGate(result.setup_required);
+  } catch (error) {
+    document.querySelector("#authTitle").textContent = "MVP sunucusu çalışmıyor";
+    document.querySelector("#authHint").textContent = "Uygulamayı statik sunucuyla değil, python backend/server.py komutuyla başlat.";
+    authMessage.textContent = error.message;
+  }
+}
+
+async function apiFetch(url, options = {}) {
+  const response = await fetch(url, options);
+  if (response.status === 401) showAuthGate(false);
+  return response;
+}
 
 function updateScenarioText() {
   currentScenario = scenarios[scenarioSelect.value];
@@ -212,7 +258,7 @@ async function runAnalysis() {
   try {
     const changedNodeId = changedNodeInput.value.trim();
     if (!changedNodeId) throw new Error("Değişen düğüm kimliği zorunludur.");
-    const response = await fetch("/api/analyze", {
+    const response = await apiFetch("/api/analyze", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -268,7 +314,7 @@ async function importGraph() {
   try {
     const [nodesCsv, edgesCsv] = await Promise.all([nodesFile.text(), edgesFile.text()]);
     const projectId = `uploaded-${Date.now()}`;
-    const response = await fetch("/api/projects/import", {
+    const response = await apiFetch("/api/projects/import", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ project_id: projectId, nodes_csv: nodesCsv, edges_csv: edgesCsv })
@@ -359,6 +405,39 @@ document.querySelectorAll(".filter").forEach(button => {
 scenarioSelect.addEventListener("change", updateScenarioText);
 analyzeButton.addEventListener("click", runAnalysis);
 importButton.addEventListener("click", importGraph);
+authForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  authMessage.textContent = "";
+  const submit = document.querySelector("#authSubmit");
+  submit.disabled = true;
+  submit.textContent = setupRequired ? "Hesap oluşturuluyor…" : "Giriş yapılıyor…";
+  try {
+    const response = await fetch(setupRequired ? "/api/auth/setup" : "/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: document.querySelector("#authEmail").value,
+        password: document.querySelector("#authPassword").value
+      })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Kimlik doğrulama başarısız.");
+    hideAuthGate(result.user);
+  } catch (error) {
+    authMessage.textContent = error.message;
+  } finally {
+    submit.disabled = false;
+    submit.textContent = setupRequired ? "Yönetici hesabını oluştur" : "Giriş yap";
+  }
+});
+logoutButton.addEventListener("click", async () => {
+  await fetch("/api/auth/logout", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}"
+  });
+  showAuthGate(false);
+});
 document.querySelector("#drawerClose").addEventListener("click", closeDrawer);
 document.querySelector("#drawerScrim").addEventListener("click", closeDrawer);
 document.querySelector("#markReviewed").addEventListener("click", () => {
@@ -369,3 +448,4 @@ document.querySelector("#exportButton").addEventListener("click", exportCsv);
 document.querySelector("#exportButtonSecondary").addEventListener("click", exportCsv);
 
 buildAuditLog();
+initializeAuth();

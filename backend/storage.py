@@ -68,6 +68,26 @@ class ProjectStore:
 
                 CREATE INDEX IF NOT EXISTS idx_analyses_project_created
                     ON analyses(project_id, created_at DESC);
+
+                CREATE TABLE IF NOT EXISTS users (
+                    id TEXT PRIMARY KEY,
+                    email TEXT NOT NULL UNIQUE,
+                    password_hash BLOB NOT NULL,
+                    password_salt BLOB NOT NULL,
+                    password_iterations INTEGER NOT NULL,
+                    role TEXT NOT NULL CHECK(role IN ('admin', 'analyst')),
+                    created_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS sessions (
+                    token_hash TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expires_at);
                 """
             )
 
@@ -210,3 +230,81 @@ class ProjectStore:
                 }
             )
         return analyses
+
+    def user_count(self) -> int:
+        with self._connect() as connection:
+            row = connection.execute("SELECT COUNT(*) AS count FROM users").fetchone()
+        return int(row["count"])
+
+    def create_first_user(
+        self,
+        email: str,
+        password_hash: bytes,
+        password_salt: bytes,
+        password_iterations: int,
+    ) -> dict:
+        user_id = f"USR-{uuid.uuid4().hex[:12].upper()}"
+        created_at = self._now()
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            if connection.execute("SELECT 1 FROM users LIMIT 1").fetchone():
+                raise ValueError("İlk yönetici hesabı daha önce oluşturulmuş.")
+            connection.execute(
+                """
+                INSERT INTO users(
+                    id, email, password_hash, password_salt,
+                    password_iterations, role, created_at
+                ) VALUES (?, ?, ?, ?, ?, 'admin', ?)
+                """,
+                (
+                    user_id,
+                    email.lower(),
+                    password_hash,
+                    password_salt,
+                    password_iterations,
+                    created_at,
+                ),
+            )
+        return {"id": user_id, "email": email.lower(), "role": "admin"}
+
+    def get_user_by_email(self, email: str) -> dict | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT id, email, password_hash, password_salt,
+                       password_iterations, role, created_at
+                FROM users WHERE email = ?
+                """,
+                (email.lower(),),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def save_session(
+        self, token_hash: str, user_id: str, created_at: str, expires_at: str
+    ) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO sessions(token_hash, user_id, created_at, expires_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (token_hash, user_id, created_at, expires_at),
+            )
+
+    def get_session_user(self, token_hash: str, now: str) -> dict | None:
+        with self._connect() as connection:
+            connection.execute("DELETE FROM sessions WHERE expires_at <= ?", (now,))
+            row = connection.execute(
+                """
+                SELECT u.id, u.email, u.role, s.expires_at
+                FROM sessions s
+                JOIN users u ON u.id = s.user_id
+                WHERE s.token_hash = ? AND s.expires_at > ?
+                """,
+                (token_hash, now),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def delete_session(self, token_hash: str) -> None:
+        with self._connect() as connection:
+            connection.execute("DELETE FROM sessions WHERE token_hash = ?", (token_hash,))

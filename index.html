@@ -20,6 +20,7 @@
       </div>
       <div class="topbar-actions">
         <span class="demo-badge" id="dataBadge"><span></span> Sentetik demo verisi</span>
+        <button class="auth-user-button" id="logoutButton" type="button" hidden>Çıkış</button>
         <button class="icon-button" id="exportButton" type="button" aria-label="Kanıt raporunu CSV olarak indir" title="Kanıt raporunu indir">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 17v3h14v-3"/></svg>
         </button>
@@ -220,6 +221,25 @@
     <button class="secondary-button full" id="markReviewed" type="button">İncelendi olarak işaretle</button>
   </aside>
   <div class="drawer-scrim" id="drawerScrim"></div>
+
+  <section class="auth-gate" id="authGate" aria-label="NexTrace AI giriş ekranı">
+    <div class="auth-card">
+      <span class="brand-mark auth-brand" aria-hidden="true"><i></i><i></i><i></i></span>
+      <p class="eyebrow">NexTrace AI güvenli erişim</p>
+      <h1 id="authTitle">Sunucu kontrol ediliyor</h1>
+      <p id="authHint">Kimlik doğrulama durumu alınıyor.</p>
+      <form id="authForm" hidden>
+        <label>E-posta
+          <input id="authEmail" type="email" autocomplete="username" required />
+        </label>
+        <label>Parola
+          <input id="authPassword" type="password" autocomplete="current-password" minlength="12" maxlength="128" required />
+        </label>
+        <button class="primary-button" id="authSubmit" type="submit">Giriş yap</button>
+      </form>
+      <p class="auth-message" id="authMessage" role="alert"></p>
+    </div>
+  </section>
 
   <script src="app.js"></script>
 </body>
