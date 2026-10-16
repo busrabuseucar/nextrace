@@ -1,5 +1,11 @@
 # NexTrace AI
 
+## Canlı demonun kapsamı
+
+[Demoyu aç](https://nextrace-impact-demo.sleek-brush-8818.chatgpt.site)
+
+Bu bağlantı hazırlanmış sonuç ve puanları gösteren bağımsız arayüz senaryosudur; canlı Jira/GitLab, Python API veya graf hesaplaması çalıştırmaz. Bu depoda yer alan Python uygulaması ise kurulup çalıştırıldığında graf üzerinden hesaplama yapar. Aşağıdaki çalışan MVP açıklaması depodaki uygulamaya aittir, statik demo bağlantısına değil.
+
 NexTrace AI, kritik mühendislik projelerinde bir değişikliğin gereksinim, kod, test ve dokümanlar üzerindeki etkisini açıklanabilir kanıt zincirleriyle görünür kılmayı hedefleyen karar destek yazılımıdır.
 
 ![NexTrace AI arayüz görünümü](docs/nextrace-dashboard.png)
