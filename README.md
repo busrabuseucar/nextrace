@@ -181,3 +181,7 @@ NEXTRACE_SECURE_COOKIES=1 python backend/server.py
 ## Fikri mülkiyet
 
 Bu proje açık kaynak lisansı altında yayımlanmamıştır. Tüm hakları saklıdır. Kaynak kodun kullanılması, kopyalanması, dağıtılması veya türev çalışmalarda kullanılması için hak sahibinden yazılı izin alınmalıdır.
+
+## İşletim
+
+[İşletim ve sürüm doğrulama](docs/OPERATIONS.md) — kurulum, veri saklama, yayın, geri dönüş ve doğrulama kapsamı.
