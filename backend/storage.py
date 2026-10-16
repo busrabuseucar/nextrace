@@ -310,27 +310,26 @@ class ProjectStore:
         }
 
     def load_graph(self, project_id: str) -> TraceGraph:
-        with self._connect() as connection:
-            node_rows = connection.execute(
-                """
-                SELECT id, label, type, owner, criticality
-                FROM nodes WHERE project_id = ? ORDER BY id
-                """,
-                (project_id,),
-            ).fetchall()
-            if not node_rows:
-                raise KeyError(f"Proje bulunamadı: {project_id}")
-            edge_rows = connection.execute(
-                """
-                SELECT source, target, relation, reason
-                FROM edges WHERE project_id = ? ORDER BY rowid
-                """,
-                (project_id,),
-            ).fetchall()
+        return self.load_graph_snapshot(project_id)[0]
 
-        nodes = [Node(**dict(row)) for row in node_rows]
-        edges = [Edge(**dict(row)) for row in edge_rows]
-        return TraceGraph(nodes, edges)
+    def load_graph_snapshot(self, project_id: str) -> tuple[TraceGraph, dict]:
+        with self._connect() as connection:
+            connection.execute("BEGIN")
+            version = connection.execute(
+                "SELECT * FROM project_versions WHERE project_id = ? ORDER BY version_number DESC LIMIT 1",
+                (project_id,),
+            ).fetchone()
+            if not version:
+                raise KeyError(f"Proje bulunamadı: {project_id}")
+            node_rows = connection.execute(
+                "SELECT id, label, type, owner, criticality FROM version_nodes WHERE version_id = ? ORDER BY id",
+                (version["id"],),
+            ).fetchall()
+            edge_rows = connection.execute(
+                "SELECT source, target, relation, reason FROM version_edges WHERE version_id = ? ORDER BY rowid",
+                (version["id"],),
+            ).fetchall()
+        return TraceGraph([Node(**dict(row)) for row in node_rows], [Edge(**dict(row)) for row in edge_rows]), dict(version)
 
     def list_projects(self, user_id: str | None = None) -> list[dict]:
         with self._connect() as connection:
@@ -338,15 +337,13 @@ class ProjectStore:
                 rows = connection.execute(
                     """
                     SELECT p.id, p.name, p.created_at, p.updated_at,
-                           COUNT(DISTINCT n.id) AS node_count,
-                           COUNT(DISTINCT e.rowid) AS edge_count,
-                           COUNT(DISTINCT pv.id) AS version_count,
+                       (SELECT source FROM project_versions latest WHERE latest.project_id = p.id ORDER BY version_number DESC LIMIT 1) AS latest_source,
+                           (SELECT COUNT(*) FROM nodes c WHERE c.project_id = p.id) AS node_count,
+                           (SELECT COUNT(*) FROM edges c WHERE c.project_id = p.id) AS edge_count,
+                           (SELECT COUNT(*) FROM project_versions c WHERE c.project_id = p.id) AS version_count,
                            pm.access_level
                     FROM projects p
                     JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = ?
-                    LEFT JOIN nodes n ON n.project_id = p.id
-                    LEFT JOIN edges e ON e.project_id = p.id
-                    LEFT JOIN project_versions pv ON pv.project_id = p.id
                     GROUP BY p.id, pm.access_level
                     ORDER BY p.updated_at DESC
                     """,
@@ -356,13 +353,11 @@ class ProjectStore:
                 rows = connection.execute(
                     """
                 SELECT p.id, p.name, p.created_at, p.updated_at,
-                       COUNT(DISTINCT n.id) AS node_count,
-                       COUNT(DISTINCT e.rowid) AS edge_count,
-                       COUNT(DISTINCT pv.id) AS version_count
+                       (SELECT source FROM project_versions latest WHERE latest.project_id = p.id ORDER BY version_number DESC LIMIT 1) AS latest_source,
+                       (SELECT COUNT(*) FROM nodes c WHERE c.project_id = p.id) AS node_count,
+                       (SELECT COUNT(*) FROM edges c WHERE c.project_id = p.id) AS edge_count,
+                       (SELECT COUNT(*) FROM project_versions c WHERE c.project_id = p.id) AS version_count
                 FROM projects p
-                LEFT JOIN nodes n ON n.project_id = p.id
-                LEFT JOIN edges e ON e.project_id = p.id
-                LEFT JOIN project_versions pv ON pv.project_id = p.id
                 GROUP BY p.id
                 ORDER BY p.updated_at DESC
                     """
@@ -380,12 +375,10 @@ class ProjectStore:
                 SELECT pv.id, pv.project_id, pv.version_number, pv.source,
                        pv.created_by, pv.created_at,
                        COALESCE(u.email, 'Sistem') AS created_by_email,
-                       COUNT(DISTINCT vn.id) AS node_count,
-                       COUNT(DISTINCT ve.rowid) AS edge_count
+                       (SELECT COUNT(*) FROM version_nodes c WHERE c.version_id = pv.id) AS node_count,
+                       (SELECT COUNT(*) FROM version_edges c WHERE c.version_id = pv.id) AS edge_count
                 FROM project_versions pv
                 LEFT JOIN users u ON u.id = pv.created_by
-                LEFT JOIN version_nodes vn ON vn.version_id = pv.id
-                LEFT JOIN version_edges ve ON ve.version_id = pv.id
                 WHERE pv.project_id = ?
                 GROUP BY pv.id
                 ORDER BY pv.version_number DESC

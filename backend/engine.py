@@ -51,48 +51,39 @@ class TraceGraph:
 
     @classmethod
     def from_csv_text(cls, nodes_csv: str, edges_csv: str) -> "TraceGraph":
-        node_reader = csv.DictReader(io.StringIO(nodes_csv.strip()))
-        edge_reader = csv.DictReader(io.StringIO(edges_csv.strip()))
-        required_node_fields = {"id", "label", "type", "owner", "criticality"}
-        required_edge_fields = {"source", "target", "relation", "reason"}
-
-        if not node_reader.fieldnames or not required_node_fields.issubset(node_reader.fieldnames):
-            raise ValueError(
-                "nodes.csv sütunları: id,label,type,owner,criticality olmalıdır."
-            )
-        if not edge_reader.fieldnames or not required_edge_fields.issubset(edge_reader.fieldnames):
-            raise ValueError(
-                "edges.csv sütunları: source,target,relation,reason olmalıdır."
-            )
+        def read_rows(text, fields, name):
+            reader = csv.DictReader(io.StringIO(text.lstrip("\ufeff").strip()), strict=True)
+            if not reader.fieldnames or set(reader.fieldnames) != set(fields) or len(reader.fieldnames) != len(fields):
+                raise ValueError(f"{name} sütunları: {','.join(fields)} olmalıdır.")
+            try:
+                for row in reader:
+                    if None in row or any(value is None for value in row.values()):
+                        raise ValueError(f"{name} satır {reader.line_num}: sütun sayısı geçersiz.")
+                    yield {key: value.strip() for key, value in row.items()}
+            except csv.Error as exc:
+                raise ValueError(f"{name}: geçersiz CSV biçimi.") from exc
 
         nodes = []
-        for row in node_reader:
-            if not row["id"].strip():
-                continue
+        for row in read_rows(nodes_csv, ("id", "label", "type", "owner", "criticality"), "nodes.csv"):
+            if not all(row[key] for key in ("id", "label", "type", "criticality")):
+                raise ValueError("Düğüm id, label, type ve criticality alanları boş olamaz.")
             try:
-                criticality = int(row["criticality"] or 0)
+                criticality = int(row["criticality"])
             except ValueError as exc:
                 raise ValueError("criticality alanı tam sayı olmalıdır.") from exc
-            nodes.append(
-                Node(
-                    id=row["id"].strip(),
-                    label=row["label"].strip(),
-                    type=row["type"].strip(),
-                    owner=row["owner"].strip(),
-                    criticality=criticality,
-                )
-            )
-
-        edges = [
-            Edge(
-                source=row["source"].strip(),
-                target=row["target"].strip(),
-                relation=row["relation"].strip(),
-                reason=row["reason"].strip(),
-            )
-            for row in edge_reader
-            if row["source"].strip() and row["target"].strip()
-        ]
+            if not -100 <= criticality <= 100:
+                raise ValueError("criticality -100 ile 100 arasında olmalıdır.")
+            nodes.append(Node(**{**row, "criticality": criticality}))
+        edges = []
+        seen = set()
+        for row in read_rows(edges_csv, ("source", "target", "relation", "reason"), "edges.csv"):
+            if not all(row[key] for key in ("source", "target", "relation")):
+                raise ValueError("İlişki source, target ve relation alanları boş olamaz.")
+            key = (row["source"], row["target"], row["relation"])
+            if key in seen:
+                raise ValueError("Aynı source, target ve relation birden fazla kez bulunamaz.")
+            seen.add(key)
+            edges.append(Edge(**row))
         return cls(nodes, edges)
 
     @classmethod
@@ -167,15 +158,15 @@ class TraceGraph:
                     "owner": node.owner,
                     "path": " → ".join(paths[node.id]),
                     "reason": evidence_reason[node.id],
-                    "status": self._status(risk),
+                    "status": "İnceleme önerisi",
                     "depth": depth,
                 }
             )
 
         critical_count = sum(item["risk"] == "critical" for item in items)
-        evidence_path_count = sum(item["risk"] in {"critical", "high"} for item in items)
+        evidence_path_count = len(items)
         completeness = sum(bool(item["owner"] and item["reason"]) for item in items)
-        confidence = 70 if not items else min(95, 72 + round(20 * completeness / len(items)))
+        metadata_coverage = round(100 * completeness / len(items)) if items else None
         duration_ms = max(1, round((time.perf_counter() - started) * 1000))
 
         if critical_count:
@@ -189,7 +180,7 @@ class TraceGraph:
             note = "Kritik risk bulunmadı; yüksek ve orta riskli varlıklar doğrulanmalıdır."
         else:
             summary = "Bağlı etki bulunamadı"
-            note = "Grafikte bu düğümden ilerleyen doğrulanmış bir ilişki bulunamadı."
+            note = "Grafikte bu düğümden ilerleyen kayıtlı bir ilişki bulunamadı."
 
         return {
             "changed_node": changed_node_id,
@@ -197,7 +188,8 @@ class TraceGraph:
             "proposed_value": proposed_value,
             "summary": summary,
             "note": note,
-            "confidence": confidence,
+            "metadata_coverage": metadata_coverage,
+            "max_depth": max_depth,
             "impact_count": len(items),
             "critical_count": critical_count,
             "path_count": evidence_path_count,

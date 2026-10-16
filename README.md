@@ -2,11 +2,13 @@
 
 NexTrace AI, kritik mühendislik projelerinde bir değişikliğin gereksinim, kod, test ve dokümanlar üzerindeki etkisini açıklanabilir kanıt zincirleriyle görünür kılmayı hedefleyen karar destek yazılımıdır.
 
-![NexTrace AI çalışan demo ekranı](docs/nextrace-dashboard.png)
+![NexTrace AI arayüz görünümü](docs/nextrace-dashboard.png)
+
+*Görsel önceki arayüz sürümünden alınmıştır; güncel metrik ve davranışlar aşağıda açıklanır.*
 
 ## Mevcut sürüm — çalışan MVP temeli
 
-Bu depo, ürün fikrini ve temel kullanıcı akışını doğrulayan **dinamik etki analizi motoru ile çalışan MVP temelini** içerir. Arayüz hazır sonuçları taklit etmez; Python API, yüklenen veya Jira/GitLab üzerinden eşitlenen izlenebilirlik grafiğini tarayarak etkilenen varlıkları, kanıt yollarını ve risk puanlarını hesaplar. Projeler, değiştirilemez grafik sürümleri ve analiz geçmişi SQLite veritabanında kalıcı olarak tutulur. Yönetici ve analist rolleri proje bazlı erişimle ayrılır. Bağlayıcılar gerçek API sözleşmelerini kullanır; ancak sürüm henüz müşteri verisiyle doğrulanmış bir üretim kurulumu değildir.
+Bu depo, ürün fikrini ve temel kullanıcı akışını doğrulayan **dinamik etki analizi motoru ile çalışan MVP temelini** içerir. Arayüz hazır sonuçları taklit etmez; Python API, yüklenen veya Jira/GitLab üzerinden eşitlenen izlenebilirlik grafiğini tarayarak etkilenen varlıkları, kanıt yollarını ve risk puanlarını hesaplar. Projeler, ayrı grafik sürümleri ve analiz geçmişi SQLite veritabanında kalıcı olarak tutulur. Yönetici ve analist rolleri proje bazlı erişimle ayrılır. Bağlayıcılar gerçek API sözleşmelerini kullanır; ancak sürüm henüz müşteri verisiyle doğrulanmış bir üretim kurulumu değildir.
 
 Demoda üç örnek değişiklik senaryosu bulunur:
 
@@ -19,9 +21,13 @@ Kullanıcı örnek senaryolardan birini seçebilir veya aktif projenin yeni dü�
 - Etkilenen mühendislik varlıklarını,
 - Kritik, yüksek ve orta düzey riskleri,
 - Gereksinimden kod, test ve dokümana uzanan kanıt yollarını,
-- İnceleme ve denetim günlüğünü
+- Gerçek zaman damgası ve grafik sürümü içeren analiz kaydını
 
 görselleştirir.
+
+## Hesaplama yaklaşımı
+
+Mevcut motor, yönlü graf üzerinde derinliği 5 ile sınırlı BFS ve açık bir puanlama formülü kullanır; eğitilmiş bir AI/LLM modeli içermez. Metadata doluluk oranı doğruluk olasılığı değildir. Mevcut/önerilen değer metinleri risk puanını değiştirmez. Ayrıntılar: [Teknik tasarım ve sınırlar](docs/TECHNICAL_DESIGN.md).
 
 ## Çalıştırma
 
@@ -96,6 +102,8 @@ id,label,type,owner,criticality
 source,target,relation,reason
 ```
 
+`criticality`, -100…100 arasında tam sayı puan düzeltmesidir. `owner` ve `reason` boş olabilir; diğer alanlar zorunludur. Eksik/fazla sütunlar ve yinelenen kimlik/ilişkiler reddedilir.
+
 Örnek dosyalar `backend/data/` klasöründedir. Web arayüzünde iki dosyayı seçtikten sonra analiz başlangıcı olacak düğüm kimliğini yazıp grafiği yükleyebilirsin.
 
 ## API
@@ -127,6 +135,16 @@ source,target,relation,reason
 python -m unittest discover -s tests -v
 ```
 
+Tarayıcı akışı testi (yalnızca geliştirme için Node.js gerekir):
+
+```bash
+npm ci
+npx playwright install chromium
+npm run test:e2e
+```
+
+GitHub Actions aynı testleri her main güncellemesinde çalıştırır.
+
 ## Sonraki ürünleştirme adımları
 
 - Test yönetim araçları ve doküman havuzları için bağlayıcılar
@@ -154,7 +172,7 @@ Hedef ürün, müşteri verilerini müşteri ortamında tutacak şekilde kurum i
 - Yönetici parola sıfırladığında eski oturumlar kapatılır ve ilk girişte parola değişikliği zorunlu tutulur.
 - Devre dışı bırakılan hesapların bütün açık oturumları iptal edilir; son aktif yönetici hesabı kapatılamaz.
 
-HTTPS arkasındaki üretim kurulumunda güvenli çerez zorunluluğunu etkinleştir:
+Bu sürüm yerel prototiptir; internet üzerinden üretim kullanımı doğrulanmamıştır. İleride HTTPS arkasında bir dağıtım hazırlanırsa güvenli çerez ayarı:
 
 ```bash
 NEXTRACE_SECURE_COOKIES=1 python backend/server.py

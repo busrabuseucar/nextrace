@@ -511,12 +511,13 @@ class NexTraceHandler(SimpleHTTPRequestHandler):
             raise KeyError(f"Proje bulunamadı: {project_id}")
         if not self._require_project_access(user, project_id, analysis_required=True):
             return
-        graph = STORE.load_graph(project_id)
+        graph, version = STORE.load_graph_snapshot(project_id)
         result = graph.analyze(
             changed_node_id=changed_node_id,
             current_value=str(payload.get("current_value", "")),
             proposed_value=str(payload.get("proposed_value", "")),
         )
+        result.update({"graph_version": version["id"], "graph_version_number": version["version_number"], "created_at": STORE._now(), "created_by": user["id"]})
         analysis_id = STORE.save_analysis(project_id, result)
         self._json({"analysis_id": analysis_id, "project_id": project_id, **result})
 

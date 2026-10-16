@@ -13,3 +13,7 @@ node_modules/
 *.db-wal
 *.sqlite
 __pycache__/
+
+test-results/
+playwright-report/
+.venv/

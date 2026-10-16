@@ -1,63 +1,7 @@
 const scenarios = {
-  latency: {
-    id: "CR-028",
-    sourceNode: "SYS-REQ-142",
-    current: "250 ms",
-    proposed: "150 ms",
-    description: "SYS-REQ-142 telemetri paketlerinin en yüksek yük altında uçtan uca iletim eşiğini düşürür.",
-    confidence: 92,
-    summary: "Yüksek etkili değişiklik",
-    note: "Üç kritik varlık aynı sürüm hedefinde. Canlıya alımdan önce arayüz, zamanlayıcı ve yük testinin birlikte güncellenmesi gerekir.",
-    pathCount: 5,
-    items: [
-      { id: "INT-017", label: "Telemetri API sözleşmesi", type: "Arayüz", risk: "critical", score: 93, owner: "Sistem Mühendisliği", path: "SYS-REQ-142 → INT-017", reason: "Yanıt süresi sözleşmesi doğrudan 250 ms eşiğini referanslıyor.", status: "İnceleme gerekli" },
-      { id: "SW-203", label: "Paket zamanlayıcı", type: "Yazılım", risk: "critical", score: 89, owner: "Gömülü Yazılım", path: "SYS-REQ-142 → INT-017 → SW-203", reason: "Zamanlayıcı kuyruğu mevcut gecikme bütçesine göre yapılandırılmış.", status: "İnceleme gerekli" },
-      { id: "TC-408", label: "Tepe yük testi", type: "Test", risk: "critical", score: 91, owner: "Doğrulama", path: "SYS-REQ-142 → TC-408", reason: "Kabul kriteri 250 ms üst sınırını doğruluyor; test verisi ve eşik güncellenmeli.", status: "Bloke" },
-      { id: "SAF-09", label: "Telemetri hazard kaydı", type: "Güvenlik", risk: "high", score: 84, owner: "Emniyet", path: "SYS-REQ-142 → INT-017 → SAF-09", reason: "Paket kaybı olasılığı düşük gecikme hedefiyle yeniden değerlendirilmelidir.", status: "Atanmadı" },
-      { id: "CFG-12", label: "Timeout yapılandırması", type: "Konfigürasyon", risk: "high", score: 81, owner: "DevOps", path: "INT-017 → CFG-12", reason: "Üretim timeout değeri yeni hedefin üzerinde kalıyor.", status: "Atanmadı" },
-      { id: "TC-412", label: "Yeniden deneme testi", type: "Test", risk: "medium", score: 77, owner: "Doğrulama", path: "SW-203 → TC-412", reason: "Retry penceresi toplam gecikme bütçesini aşabilir.", status: "Planlandı" },
-      { id: "DOC-77", label: "Arayüz kontrol dokümanı", type: "Doküman", risk: "medium", score: 64, owner: "Konfigürasyon", path: "INT-017 → DOC-77", reason: "ICD-07 bölüm 4.2 eski zamanlama değerini içeriyor.", status: "Planlandı" },
-      { id: "REL-31", label: "Sürüm temel çizgisi", type: "Sürüm", risk: "medium", score: 58, owner: "Konfigürasyon", path: "SW-203 → REL-31", reason: "Değişiklik, dondurulmuş uçuş yazılımı temel çizgisini etkiliyor.", status: "Onay bekliyor" }
-    ]
-  },
-  encryption: {
-    id: "CR-031",
-    sourceNode: "SEC-REQ-055",
-    current: "AES-128",
-    proposed: "AES-256",
-    description: "SEC-REQ-055 yer istasyonu ile hava aracı arasındaki telemetri şifreleme standardını yükseltir.",
-    confidence: 88,
-    summary: "Güvenlik odaklı değişiklik",
-    note: "Anahtar yönetimi, işlemci yükü ve uyumluluk testleri aynı değişiklik paketi içinde ele alınmalıdır.",
-    pathCount: 4,
-    items: [
-      { id: "SEC-API-4", label: "Kripto servis sözleşmesi", type: "Arayüz", risk: "critical", score: 94, owner: "Siber Güvenlik", path: "SEC-REQ-055 → SEC-API-4", reason: "Anahtar uzunluğu ve algoritma kimliği servis sözleşmesinde sabit.", status: "İnceleme gerekli" },
-      { id: "SW-318", label: "Kripto sağlayıcı", type: "Yazılım", risk: "critical", score: 90, owner: "Platform Yazılımı", path: "SEC-API-4 → SW-318", reason: "Mevcut donanım hızlandırıcı yapılandırması AES-128 profilini kullanıyor.", status: "Bloke" },
-      { id: "PERF-22", label: "CPU yük bütçesi", type: "Performans", risk: "high", score: 83, owner: "Sistem Mühendisliği", path: "SW-318 → PERF-22", reason: "Şifreleme maliyeti görev bilgisayarı işlem bütçesini etkileyebilir.", status: "Atanmadı" },
-      { id: "TC-509", label: "Kripto uyumluluk testi", type: "Test", risk: "high", score: 80, owner: "Doğrulama", path: "SEC-REQ-055 → TC-509", reason: "Test vektörleri ve sertifika profili güncel algoritmayı kapsamıyor.", status: "Planlandı" },
-      { id: "KEY-7", label: "Anahtar döndürme politikası", type: "Politika", risk: "medium", score: 68, owner: "Siber Güvenlik", path: "SEC-API-4 → KEY-7", reason: "Anahtar yaşam döngüsü belgesi algoritma değişikliğine bağlanmalı.", status: "Planlandı" },
-      { id: "DOC-91", label: "Güvenlik tasarım dokümanı", type: "Doküman", risk: "medium", score: 61, owner: "Sistem Mühendisliği", path: "SEC-REQ-055 → DOC-91", reason: "Tehdit modeli ve algoritma seçimi bölümü eski standardı içeriyor.", status: "Onay bekliyor" }
-    ]
-  },
-  sampling: {
-    id: "CR-044",
-    sourceNode: "SNS-REQ-021",
-    current: "60 Hz",
-    proposed: "100 Hz",
-    description: "SNS-REQ-021 uçuş kontrol sensörlerinin örnekleme sıklığını artırır.",
-    confidence: 86,
-    summary: "Performans etkili değişiklik",
-    note: "Veri yolu kapasitesi, filtre katsayıları ve gerçek zamanlı görev bütçesi birlikte doğrulanmalıdır.",
-    pathCount: 4,
-    items: [
-      { id: "BUS-11", label: "Sensör veri yolu", type: "Arayüz", risk: "critical", score: 92, owner: "Aviyonik", path: "SNS-REQ-021 → BUS-11", reason: "Artan mesaj sıklığı veri yolu kullanım oranını yükseltiyor.", status: "İnceleme gerekli" },
-      { id: "SW-141", label: "Sinyal filtreleme", type: "Yazılım", risk: "critical", score: 88, owner: "Uçuş Yazılımı", path: "SNS-REQ-021 → SW-141", reason: "Filtre katsayıları 60 Hz örnekleme periyoduna göre hesaplanmış.", status: "Bloke" },
-      { id: "RT-06", label: "Gerçek zamanlı görev bütçesi", type: "Performans", risk: "high", score: 85, owner: "Sistem Mühendisliği", path: "SW-141 → RT-06", reason: "Görev yürütme süresi yeni periyotta zaman aşımına yaklaşabilir.", status: "Atanmadı" },
-      { id: "TC-244", label: "Sensör bant genişliği testi", type: "Test", risk: "high", score: 79, owner: "Doğrulama", path: "BUS-11 → TC-244", reason: "Mevcut test yalnızca 60 Hz üst sınırını doğruluyor.", status: "Planlandı" },
-      { id: "SIM-4", label: "Uçuş dinamiği modeli", type: "Simülasyon", risk: "medium", score: 67, owner: "Modelleme", path: "SW-141 → SIM-4", reason: "Simülasyon veri adımı yeni örnekleme süresiyle eşleşmiyor.", status: "Planlandı" },
-      { id: "DOC-32", label: "Sensör ICD", type: "Doküman", risk: "medium", score: 59, owner: "Konfigürasyon", path: "BUS-11 → DOC-32", reason: "Mesaj periyodu ve bant genişliği tabloları güncellenmeli.", status: "Onay bekliyor" }
-    ]
-  }
+  latency: {id: "CR-028", sourceNode: "SYS-REQ-142", current: "250 ms", proposed: "150 ms", description: "Sentetik telemetri gecikme değişikliği örneği."},
+  encryption: {id: "CR-031", sourceNode: "SEC-REQ-055", current: "AES-128", proposed: "AES-256", description: "Sentetik şifreleme standardı değişikliği örneği."},
+  sampling: {id: "CR-044", sourceNode: "SNS-REQ-021", current: "60 Hz", proposed: "100 Hz", description: "Sentetik sensör örnekleme değişikliği örneği."}
 };
 
 const graphPositions = [
@@ -97,6 +41,8 @@ const versionMessage = document.querySelector("#versionMessage");
 let currentScenario = scenarios.latency;
 let currentFilter = "all";
 let analyzed = false;
+let analysisGeneration = 0;
+let lastAnalysis = null;
 let currentProjectId = "demo";
 let currentAnalysisId = null;
 let setupRequired = false;
@@ -106,6 +52,7 @@ let currentVersions = [];
 let passwordChangeForced = false;
 
 function showAuthGate(requiresSetup = false) {
+  resetAnalysis();
   setupRequired = requiresSetup;
   authGate.hidden = false;
   authForm.hidden = false;
@@ -197,6 +144,7 @@ async function apiFetch(url, options = {}) {
 }
 
 function applySelectedProjectAccess() {
+  updateSourceLabel();
   const project = availableProjects.find(item => item.id === currentProjectId);
   const canAnalyze = currentUser?.role === "admin" || project?.access_level === "analyst";
   analyzeButton.disabled = !canAnalyze;
@@ -220,7 +168,8 @@ async function loadAvailableProjects(preferredProjectId = null) {
     const selected = availableProjects.find(project => project.id === requested) || availableProjects[0];
     currentProjectId = selected?.id || "";
     projectSelect.value = currentProjectId;
-    if (currentProjectId === "demo") changedNodeInput.value = currentScenario.sourceNode;
+    if (isSeedProject()) changedNodeInput.value = currentScenario.sourceNode;
+    else changedNodeInput.value = "";
     resetAnalysis();
     applySelectedProjectAccess();
     if (document.querySelector('[data-view-panel="versions"]').classList.contains("active")) {
@@ -492,19 +441,42 @@ function syncSelectedAccountStatus() {
   document.querySelector("#accountActive").value = selected.dataset.active === "true" ? "true" : "false";
 }
 
+function isSeedProject() {
+  return availableProjects.find(project => project.id === currentProjectId)?.latest_source === "seed";
+}
+
+function updateSourceLabel() {
+  const project = availableProjects.find(item => item.id === currentProjectId);
+  const label = !project ? "Proje seçilmedi" : isSeedProject() ? "Sentetik demo verisi" : `Kayıtlı proje verisi · ${project.latest_source}`;
+  document.querySelector("#dataBadge").lastChild.textContent = ` ${label}`;
+  importStatus.textContent = label;
+  scenarioSelect.disabled = !isSeedProject();
+  document.querySelector("#scenarioDescription").textContent = isSeedProject() ? currentScenario.description : "Seçili grafikteki başlangıç düğümünü gir. Etki, kayıtlı ilişkilere göre hesaplanır.";
+  document.querySelector("#currentValue").textContent = isSeedProject() ? currentScenario.current : "—";
+  document.querySelector("#proposedValue").textContent = isSeedProject() ? currentScenario.proposed : "—";
+  document.querySelector("#scenarioId").textContent = isSeedProject() ? currentScenario.id : currentProjectId;
+}
+
 function updateScenarioText() {
   currentScenario = scenarios[scenarioSelect.value];
   document.querySelector("#scenarioId").textContent = currentScenario.id;
   document.querySelector("#currentValue").textContent = currentScenario.current;
   document.querySelector("#proposedValue").textContent = currentScenario.proposed;
   document.querySelector("#scenarioDescription").textContent = currentScenario.description;
-  if (currentProjectId === "demo") changedNodeInput.value = currentScenario.sourceNode;
+  if (isSeedProject()) changedNodeInput.value = currentScenario.sourceNode;
+  else changedNodeInput.value = "";
   resetAnalysis();
 }
 
 function resetAnalysis() {
+  analysisGeneration += 1;
   analyzed = false;
+  lastAnalysis = null;
+  document.querySelector("#auditVersion").textContent = "—";
+  closeDrawer();
+  ["#exportButton", "#exportButtonSecondary"].forEach(id => document.querySelector(id).disabled = true);
   currentAnalysisId = null;
+  document.querySelector("#auditTimeline").textContent = "Henüz analiz oluşturulmadı.";
   graphStage.classList.remove("analyzed");
   traceGraph.innerHTML = "";
   evidenceTable.innerHTML = '<tr class="placeholder-row"><td colspan="5">Sonuçlar için etki analizini çalıştır.</td></tr>';
@@ -515,7 +487,7 @@ function resetAnalysis() {
   document.querySelector("#impactCount").textContent = "—";
   document.querySelector("#criticalCount").textContent = "—";
   document.querySelector("#pathCount").textContent = "—";
-  document.querySelector("#summaryNote").textContent = "Analiz, izlenebilirlik grafiğindeki doğrulanmış ilişkileri ve sürüm bilgilerini kullanır.";
+  document.querySelector("#summaryNote").textContent = "Analiz, izlenebilirlik grafiğindeki kayıtlı ilişkileri ve sürüm bilgilerini kullanır.";
 }
 
 function riskLabel(risk) {
@@ -531,7 +503,7 @@ function escapeHtml(value) {
 function renderSummary() {
   const critical = currentScenario.items.filter(item => item.risk === "critical").length;
   document.querySelector("#summaryTitle").textContent = currentScenario.summary;
-  document.querySelector("#confidenceRing").textContent = `%${currentScenario.confidence}`;
+  document.querySelector("#confidenceRing").textContent = currentScenario.metadataCoverage === null ? "—" : `%${currentScenario.metadataCoverage}`;
   document.querySelector("#impactCount").textContent = currentScenario.items.length;
   document.querySelector("#criticalCount").textContent = critical;
   document.querySelector("#pathCount").textContent = currentScenario.pathCount;
@@ -561,7 +533,7 @@ function createSvg(tag, attrs = {}) {
 
 function renderGraph() {
   traceGraph.innerHTML = "";
-  const root = { id: changedNodeInput.value.trim(), label: "Değişiklik kaynağı", risk: "source", score: null };
+  const root = { id: lastAnalysis.changed_node, label: "Değişiklik kaynağı", risk: "source", score: null };
   const items = [root, ...currentScenario.items.slice(0, 8)];
   const itemIndexes = new Map(items.map((item, index) => [item.id, index]));
   const edges = [];
@@ -613,6 +585,8 @@ function renderGraph() {
 }
 
 async function runAnalysis() {
+  resetAnalysis();
+  const generation = analysisGeneration;
   analyzeButton.disabled = true;
   analyzeButtonLabel.textContent = "Graf taranıyor…";
   analysisState.className = "analysis-state running";
@@ -627,22 +601,25 @@ async function runAnalysis() {
       body: JSON.stringify({
         project_id: currentProjectId,
         changed_node_id: changedNodeId,
-        current_value: currentScenario.current,
-        proposed_value: currentScenario.proposed
+        current_value: isSeedProject() ? currentScenario.current : "",
+        proposed_value: isSeedProject() ? currentScenario.proposed : ""
       })
     });
     const result = await response.json();
+    if (generation !== analysisGeneration) return;
     if (!response.ok) throw new Error(result.error || "Analiz tamamlanamadı.");
 
     currentScenario = {
       ...currentScenario,
       items: result.items,
-      confidence: result.confidence,
+      metadataCoverage: result.metadata_coverage,
       summary: result.summary,
       note: result.note,
       pathCount: result.path_count
     };
+    lastAnalysis = result;
     currentAnalysisId = result.analysis_id;
+    ["#exportButton", "#exportButtonSecondary"].forEach(id => document.querySelector(id).disabled = false);
     analyzed = true;
     renderSummary();
     renderGraph();
@@ -652,11 +629,12 @@ async function runAnalysis() {
     analysisState.innerHTML = `<span></span> Analiz tamamlandı · ${result.duration_ms} ms`;
     buildAuditLog();
   } catch (error) {
+    if (generation !== analysisGeneration) return;
     analysisState.className = "analysis-state error";
     analysisState.innerHTML = "<span></span>";
     analysisState.append(document.createTextNode(` ${error.message}`));
   } finally {
-    analyzeButton.disabled = false;
+    applySelectedProjectAccess();
     analyzeButtonLabel.textContent = analyzed ? "Analizi yeniden çalıştır" : "Etkiyi analiz et";
   }
 }
@@ -726,12 +704,15 @@ function closeDrawer() {
 }
 
 function exportCsv() {
+  if (!analyzed || !lastAnalysis) return;
   const safeCell = value => {
     const text = String(value);
-    return /^[=+\-@]/.test(text) ? `'${text}` : text;
+    return /^[\s]*[=+\-@]/.test(text) ? `'${text}` : text;
   };
   const rows = [
-    ["Analiz", currentScenario.id],
+    ["Analiz", currentAnalysisId],
+    ["Grafik sürümü", lastAnalysis.graph_version],
+    ["Kayıt zamanı", lastAnalysis.created_at],
     ["Varlık", "Tür", "Kanıt yolu", "Risk", "Puan", "Durum", "Gerekçe"],
     ...currentScenario.items.map(item => [item.id, item.type, item.path, riskLabel(item.risk), item.score, item.status, item.reason])
   ];
@@ -739,21 +720,23 @@ function exportCsv() {
   const blob = new Blob(["\ufeff", csv], { type: "text/csv;charset=utf-8" });
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
-  link.download = `${currentScenario.id}-nextrace-etki-kanitlari.csv`;
+  link.download = `${currentAnalysisId}-nextrace-etki-kanitlari.csv`;
   link.click();
   URL.revokeObjectURL(link.href);
 }
 
 function buildAuditLog() {
-  const analysisId = currentAnalysisId || "Henüz analiz oluşturulmadı";
-  const events = [
-    ["09:42:11", `${currentScenario.id} değişiklik girdisi kaydedildi`, "SYS-REQ kaynak sürümü: 7.3"],
-    ["09:42:12", "İzlenebilirlik grafiği tarandı", `${currentScenario.items.length} etkilenmiş varlık, ${currentScenario.pathCount} kanıt yolu`],
-    ["09:42:13", "Risk puanları üretildi", `Güven skoru: %${currentScenario.confidence}`],
-    ["09:42:14", "Sonuç paketi kalıcı depoya kaydedildi", `Analiz kimliği: ${analysisId}`]
-  ];
-  document.querySelector("#auditTimeline").innerHTML = events.map(([time, title, meta]) => `
-    <div class="audit-event"><time>${time}</time><strong>${title}</strong><span>${meta}</span></div>`).join("");
+  const timeline = document.querySelector("#auditTimeline");
+  if (!lastAnalysis) { timeline.textContent = "Henüz analiz oluşturulmadı."; return; }
+  document.querySelector("#auditVersion").textContent = `v${lastAnalysis.graph_version_number}`;
+  const event = document.createElement("div");
+  event.className = "audit-event";
+  for (const [tag, text] of [["time", lastAnalysis.created_at], ["strong", "Analiz kaydedildi"], ["span", `${currentAnalysisId} · Grafik v${lastAnalysis.graph_version_number} (${lastAnalysis.graph_version}) · ${lastAnalysis.changed_node}`]]) {
+    const element = document.createElement(tag);
+    element.textContent = text;
+    event.append(element);
+  }
+  timeline.replaceChildren(event);
 }
 
 document.querySelectorAll(".nav-item").forEach(button => {
@@ -777,7 +760,8 @@ document.querySelectorAll(".filter").forEach(button => {
 scenarioSelect.addEventListener("change", updateScenarioText);
 projectSelect.addEventListener("change", () => {
   currentProjectId = projectSelect.value;
-  if (currentProjectId === "demo") changedNodeInput.value = currentScenario.sourceNode;
+  if (isSeedProject()) changedNodeInput.value = currentScenario.sourceNode;
+  else changedNodeInput.value = "";
   resetAnalysis();
   applySelectedProjectAccess();
   if (document.querySelector('[data-view-panel="versions"]').classList.contains("active")) loadProjectVersions();
@@ -954,12 +938,10 @@ logoutButton.addEventListener("click", async () => {
 });
 document.querySelector("#drawerClose").addEventListener("click", closeDrawer);
 document.querySelector("#drawerScrim").addEventListener("click", closeDrawer);
-document.querySelector("#markReviewed").addEventListener("click", () => {
-  document.querySelector("#markReviewed").textContent = "İncelendi ✓";
-  document.querySelector("#markReviewed").disabled = true;
-});
 document.querySelector("#exportButton").addEventListener("click", exportCsv);
 document.querySelector("#exportButtonSecondary").addEventListener("click", exportCsv);
 
-buildAuditLog();
+resetAnalysis();
 initializeAuth();
+
+changedNodeInput.addEventListener("input", resetAnalysis);

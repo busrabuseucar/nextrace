@@ -1,0 +1,28 @@
+const { test, expect } = require('@playwright/test');
+test('setup, analysis, export, invalidation and logout', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/');
+  await page.locator('#authEmail').fill('browser@example.test');
+  await page.locator('#authPassword').fill('BrowserExample123!');
+  await page.locator('#authSubmit').click();
+  await expect(page.locator('#authGate')).toBeHidden();
+  await expect(page.locator('#exportButton')).toBeDisabled();
+  await page.locator('#analyzeButton').click();
+  await expect(page.locator('#impactCount')).toHaveText('8');
+  await expect(page.locator('#pathCount')).toHaveText('8');
+  await expect(page.locator('#confidenceRing')).toHaveText('%100');
+  await expect(page.locator('#auditTimeline')).toContainText('NXT-');
+  await expect(page.locator('#auditVersion')).toHaveText('v1');
+  const downloadPromise = page.waitForEvent('download');
+  await page.locator('#exportButton').click();
+  expect((await downloadPromise).suggestedFilename()).toMatch(/^NXT-/);
+  await page.locator('#changedNodeInput').fill('UNKNOWN');
+  await expect(page.locator('#exportButton')).toBeDisabled();
+  await page.locator('#analyzeButton').click();
+  await expect(page.locator('#analysisState')).toContainText('bulunamadı');
+  await expect(page.locator('#impactCount')).toHaveText('—');
+  await page.locator('#logoutButton').click();
+  await expect(page.locator('#authGate')).toBeVisible();
+  expect(errors).toEqual([]);
+});

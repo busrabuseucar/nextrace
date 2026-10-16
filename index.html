@@ -128,21 +128,22 @@
                 <p class="eyebrow">Analiz özeti</p>
                 <h2 id="summaryTitle">Henüz çalıştırılmadı</h2>
               </div>
-              <span class="confidence-ring" id="confidenceRing">—</span>
+              <span class="confidence-ring" title="Sahip ve gerekçe alanları dolu sonuçların oranı; doğruluk olasılığı değildir." aria-label="Metadata doluluk oranı" id="confidenceRing">—</span>
             </div>
+            <p>Metadata doluluğu üstte gösterilir; model doğruluğu ölçümü değildir.</p>
             <div class="metric-row">
               <div><strong id="impactCount">—</strong><span>Etkilenen varlık</span></div>
               <div><strong id="criticalCount">—</strong><span>Kritik risk</span></div>
               <div><strong id="pathCount">—</strong><span>Kanıt yolu</span></div>
             </div>
-            <p class="summary-note" id="summaryNote">Analiz, izlenebilirlik grafiğindeki doğrulanmış ilişkileri ve sürüm bilgilerini kullanır.</p>
+            <p class="summary-note" id="summaryNote">Analiz, izlenebilirlik grafiğindeki kayıtlı ilişkileri ve sürüm bilgilerini kullanır.</p>
           </article>
         </div>
 
         <article class="graph-card">
           <div class="card-heading graph-heading">
             <div>
-              <p class="eyebrow">Canlı izlenebilirlik grafiği</p>
+              <p class="eyebrow">İzlenebilirlik grafiği · ilk 8 etkilenen varlık</p>
               <h2>Değişikliğin zincirleme etkisi</h2>
             </div>
             <div class="graph-legend" aria-label="Risk düzeyi açıklaması">
@@ -188,18 +189,19 @@
         <div class="page-heading">
           <div>
             <p class="eyebrow">Teknik kanıt</p>
-            <h1>NexTrace Sistem Mimarisi</h1>
+            <h1>NexTrace Hedef Mimarisi</h1>
             <p>Kaynak sistemlerden açıklanabilir etki kararına kadar izlenebilir, güvenli veri hattı.</p>
           </div>
           <span class="version-chip">Mimari v0.3</span>
         </div>
+        <p>Bu şema hedef ürünü gösterir. MFA, şifreleme/maskeleme, TestRail, DOORS, SharePoint, webhook ve değiştirilemez günlük mevcut sürümde uygulanmamıştır.</p>
         <article class="architecture-card">
           <img src="assets/nextrace-architecture.svg" alt="NexTrace veri kaynakları, bağlayıcı katmanı, izlenebilirlik grafiği ve etki analizi motoru mimarisi" />
         </article>
         <div class="architecture-notes">
-          <article><span>01</span><div><h3>Kaynakta değişiklik yok</h3><p>Jira, GitLab, TestRail ve doküman havuzları yalnızca bağlayıcılarla okunur.</p></div></article>
+          <article><span>01</span><div><h3>Kaynakta değişiklik yok</h3><p>Jira issue ve GitLab commit bağlayıcıları salt okunurdur. TestRail ve doküman havuzu bağlayıcıları planlanmaktadır.</p></div></article>
           <article><span>02</span><div><h3>Açıklanabilir karar</h3><p>Her risk puanı, kaynak varlığa uzanan denetlenebilir ilişki yoluyla gösterilir.</p></div></article>
-          <article><span>03</span><div><h3>Kurumsal güvenlik</h3><p>Özel bulut/on-prem kurulum, rol tabanlı erişim ve değiştirilemez denetim kaydı desteklenir.</p></div></article>
+          <article><span>03</span><div><h3>Kurumsal güvenlik</h3><p>Rol ve proje bazlı erişim ile SQLite analiz geçmişi bulunur. Kurumsal dağıtım ve kurcalamaya dayanıklı denetim kaydı henüz doğrulanmamıştır.</p></div></article>
         </div>
       </section>
 
@@ -257,7 +259,7 @@
           <button class="secondary-button" id="exportButtonSecondary" type="button">CSV raporunu indir</button>
         </div>
         <article class="audit-card">
-          <div class="audit-topline"><span>Depolama</span><strong>SQLite</strong><span>Veri sürümü</span><strong>graph@2.4.1</strong><span>Durum</span><strong class="verified">Kalıcı kayıt açık</strong></div>
+          <div class="audit-topline"><span>Depolama</span><strong>SQLite</strong><span>Veri sürümü</span><strong id="auditVersion">—</strong><span>Durum</span><strong class="verified">Kalıcı kayıt açık</strong></div>
           <div id="auditTimeline" class="audit-timeline"></div>
         </article>
       </section>
@@ -389,7 +391,7 @@
       <div><dt>Kanıt yolu</dt><dd id="drawerPath">—</dd></div>
       <div><dt>Gerekçe</dt><dd id="drawerReason">—</dd></div>
     </dl>
-    <button class="secondary-button full" id="markReviewed" type="button">İncelendi olarak işaretle</button>
+    <p>İnceleme durumu kaydetme iş akışı bu sürümde bulunmuyor.</p>
   </aside>
   <div class="drawer-scrim" id="drawerScrim"></div>
 

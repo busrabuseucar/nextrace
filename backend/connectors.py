@@ -440,7 +440,7 @@ def build_trace_graph(
             continue
         seen_commit_ids.add(commit_id)
         message = _clean(commit.get("message") or commit.get("title"), 600, "")
-        title = _clean(commit.get("title") or message.splitlines()[0], 240, sha[:12])
+        title = _clean(commit.get("title") or (message.splitlines() or [""])[0], 240, sha[:12])
         nodes.append(
             Node(
                 id=commit_id,
